@@ -1,21 +1,20 @@
-
-import subprocess
 import multiprocessing
-from multiprocessing import Process, Queue
-from classes.Member import Member
-import json
 import time
 from datetime import datetime, timedelta
+from multiprocessing import Process
+
+from classes.Member import Member
 from pytz import timezone
+
 eastern = timezone('US/Eastern')
 
 # from flask import request
 # import flask
-from data.rooms import *
-from data.templates import *
-from oauth_app import *
+from slack_outlook.data.rooms import *
+from slack_outlook.data.templates import *
+from slack_outlook.oauth_app import *
 from slackclient import SlackClient
-from config import *
+
 slack_token = SLACK_TOKEN
 sc = SlackClient(slack_token)
 multiprocessing.Process()
@@ -87,7 +86,7 @@ def rtm(token, queue):
                     member = channel_members[res[0].get('channel', None)]
                     if not member.token:
 
-                        sc.rtm_send_message(member.channel_id, 'Hello {0}! To continue authorize with Cornell Office 365 account: \n Click here: http://localhost:5000?user={1}'.format(member.first_name, member.channel_id))
+                        sc.rtm_send_message(member.channel_id, 'Hello {name}! To continue authorize with Cornell Office 365 account: \n Click here: http://{ip}:5000?user={channel}'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id))
 
 
 
@@ -162,4 +161,5 @@ if __name__ == '__main__':
 
     p = Process(target=rtm, args=(token, queue))
     p.start()
-    APP.run(use_reloader=False)
+    APP.run(use_reloader=False, host='0.0.0.0', port=5000)
+    print(APP.config)

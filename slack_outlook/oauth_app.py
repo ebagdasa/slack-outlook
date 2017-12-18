@@ -4,20 +4,17 @@
 import base64
 import pprint
 import uuid
-from multiprocessing import Process, Queue
+from multiprocessing import Queue
+
 import flask
-from flask_oauthlib.client import OAuth
-import json
-import time
 from flask import request
-import flask
-from slackclient import SlackClient
-import config
+from flask_oauthlib.client import OAuth
 
-
+from slack_outlook import config
 
 APP = flask.Flask(__name__, template_folder='static/templates')
 APP.debug = True
+APP.host = config.SERVER_IP
 APP.secret_key = 'development'
 OAUTH = OAuth(APP)
 token = dict()
