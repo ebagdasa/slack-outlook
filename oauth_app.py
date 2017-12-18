@@ -14,7 +14,6 @@ import flask
 from slackclient import SlackClient
 import config
 
-sc = SlackClient('xoxb-285148769189-saA2QxLcGOYxW0D3vZRMFVDr')
 
 
 APP = flask.Flask(__name__, template_folder='static/templates')
