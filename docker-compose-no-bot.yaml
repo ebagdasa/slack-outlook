@@ -1,0 +1,45 @@
+version: '2'
+
+services:
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    links:
+      - app
+    volumes:
+      - "/etc/nginx/conf.d"
+      - "/etc/nginx/vhost.d"
+      - "/usr/share/nginx/html"
+      - "./volumes/proxy/certs:/etc/nginx/certs:ro"
+      - "./certs:/etc/letsencrypt"
+      
+  app:
+    environment:
+      DJANGO_MANAGEPY_MIGRATE: "on"
+    build:
+      context: ./ancile-slackbot
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    links:
+      - database
+    volumes:
+      - "./migrations:/usr/src/app/ancile/slackbot/migrations"
+  
+  database:
+    image: postgres
+    expose:
+      - "5432"
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./postgresql/data:/var/lib/postgresql/data
+
