@@ -108,7 +108,7 @@ def rtm(token, queue):
 
                             words = res[0]['text'].split()
 
-                            if words[0]=='list':
+                            if words[0].lower()=='list':
                                 floor = int(words[1])
                                 if floor not in [0, 1, 2, 3, 4]:
                                     raise ValueError('Floor is wrong use: 0, 1, 2, 3, 4')
@@ -116,7 +116,7 @@ def rtm(token, queue):
                                 sc.rtm_send_message(member.channel_id, 'Available rooms on {0} floor: \n {1}'.format(words[1], ','.join(rooms)))
                                 continue
 
-                            elif words[0]=='book':
+                            elif words[0].lower()=='book':
 
                                 room = words[1]
                                 print(room)
