@@ -3,18 +3,15 @@
 In a production deployment, this information should be saved in a database or
 other secure storage mechanism.
 """
+from secret import *
 
-CLIENT_ID = 'ENTER_YOUR_CLIENT_ID'
-CLIENT_SECRET = 'ENTER_YOUR_SECRET'
 REDIRECT_URI = 'http://localhost:5000/login/authorized'
-
 AUTHORITY_URL = 'https://login.microsoftonline.com/common'
 AUTH_ENDPOINT = '/oauth2/v2.0/authorize'
 TOKEN_ENDPOINT = '/oauth2/v2.0/token'
 
 RESOURCE = 'https://graph.microsoft.com/'
-API_VERSION = 'v1.0'
-SCOPES = ['User.Read', 'Mail.Send']
+API_VERSION = 'beta'
 
 # This code can be removed after configuring CLIENT_ID and CLIENT_SECRET above.
 if 'ENTER_YOUR' in CLIENT_ID or 'ENTER_YOUR' in CLIENT_SECRET:

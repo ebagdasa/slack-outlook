@@ -4,16 +4,25 @@
 import base64
 import pprint
 import uuid
-
+from multiprocessing import Process, Queue
 import flask
 from flask_oauthlib.client import OAuth
-
+import json
+import time
+from flask import request
+import flask
+from slackclient import SlackClient
 import config
+
+sc = SlackClient('xoxb-285148769189-saA2QxLcGOYxW0D3vZRMFVDr')
+
 
 APP = flask.Flask(__name__, template_folder='static/templates')
 APP.debug = True
 APP.secret_key = 'development'
 OAUTH = OAuth(APP)
+token = dict()
+queue = Queue()
 MSGRAPH = OAUTH.remote_app(
     'microsoft',
     consumer_key=config.CLIENT_ID,
@@ -24,26 +33,33 @@ MSGRAPH = OAUTH.remote_app(
     access_token_method='POST',
     access_token_url=config.AUTHORITY_URL + config.TOKEN_ENDPOINT,
     authorize_url=config.AUTHORITY_URL + config.AUTH_ENDPOINT)
+#
+# @APP.route('/')
+# def homepage():
+#     """Render the home page."""
+#     return flask.render_template('homepage.html')
 
 @APP.route('/')
-def homepage():
-    """Render the home page."""
-    return flask.render_template('homepage.html')
-
-@APP.route('/login')
 def login():
     """Prompt user to authenticate."""
-    flask.session['state'] = str(uuid.uuid4())
+
+
+    flask.session['state'] = request.values['user']
     return MSGRAPH.authorize(callback=config.REDIRECT_URI, state=flask.session['state'])
 
 @APP.route('/login/authorized')
 def authorized():
     """Handler for the application's Redirect Uri."""
+    print(flask.request)
     if str(flask.session['state']) != str(flask.request.args['state']):
         raise Exception('state returned to redirect URL does not match!')
     response = MSGRAPH.authorized_response()
     flask.session['access_token'] = response['access_token']
-    return flask.redirect('/mailform')
+    token['access'] = response['access_token']
+    queue.put((flask.session['state'], response['access_token']))
+    # room_data = MSGRAPH.get("me/findRooms(RoomList='CT-Bloomberg@groups.cornell.edu')", headers=request_headers()).data
+
+    return flask.render_template('success.html')
 
 @APP.route('/mailform')
 def mailform():
@@ -52,6 +68,15 @@ def mailform():
     return flask.render_template('mailform.html',
                                  name=user_profile['displayName'],
                                  email=user_profile['userPrincipalName'])
+
+@APP.route('/book_room')
+def book_rooms():
+    """Sample form for sending email via Microsoft Graph."""
+
+    return None
+
+
+
 
 @APP.route('/send_mail')
 def send_mail():
@@ -72,10 +97,7 @@ def send_mail():
                                  response_status=response.status,
                                  response_json=response_json)
 
-@MSGRAPH.tokengetter
-def get_token():
-    """Called by flask_oauthlib.client to retrieve current access token."""
-    return (flask.session.get('access_token'), '')
+
 
 def request_headers():
     """Return dictionary of default HTTP headers for Graph API calls."""
@@ -128,5 +150,3 @@ def sendmail(client, subject=None, recipients=None, html=None, attachments=None)
                        data=email_msg,
                        format='json')
 
-if __name__ == '__main__':
-    APP.run()
