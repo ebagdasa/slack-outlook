@@ -1,4 +1,4 @@
-from slack_outlook.secret import rooms
+from secret import rooms
 
 def get_room_by_no(no):
 

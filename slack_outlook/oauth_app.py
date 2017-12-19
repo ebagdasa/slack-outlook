@@ -10,7 +10,7 @@ import flask
 from flask import request
 from flask_oauthlib.client import OAuth
 
-from slack_outlook import config
+import config
 
 APP = flask.Flask(__name__, template_folder='static/templates')
 APP.debug = True

@@ -10,10 +10,11 @@ eastern = timezone('US/Eastern')
 
 # from flask import request
 # import flask
-from slack_outlook.data.rooms import *
-from slack_outlook.data.templates import *
-from slack_outlook.oauth_app import *
+from data.rooms import *
+from data.templates import *
+from oauth_app import *
 from slackclient import SlackClient
+from config import *
 
 slack_token = SLACK_TOKEN
 sc = SlackClient(slack_token)
@@ -86,7 +87,7 @@ def rtm(token, queue):
                     member = channel_members[res[0].get('channel', None)]
                     if not member.token:
 
-                        sc.rtm_send_message(member.channel_id, 'Hello {name}! To continue authorize with Cornell Office 365 account: \n Click here: http://{ip}:5000?user={channel}'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id))
+                        sc.rtm_send_message(member.channel_id, 'Hello {name}! To continue authorize with Cornell Office 365 account: \n Click here: https://{ip}?user={channel}'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id))
 
 
 
@@ -161,5 +162,5 @@ if __name__ == '__main__':
 
     p = Process(target=rtm, args=(token, queue))
     p.start()
-    APP.run(use_reloader=False, host='0.0.0.0', port=5000)
+    APP.run(use_reloader=False, host='0.0.0.0', port=8000)
     print(APP.config)

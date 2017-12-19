@@ -3,9 +3,9 @@
 In a production deployment, this information should be saved in a database or
 other secure storage mechanism.
 """
-from slack_outlook.secret import *
+from secret import *
 
-REDIRECT_URI = 'http://{ip}:5000/login/authorized'.format(ip=SERVER_IP)
+REDIRECT_URI = 'https://{ip}/login/authorized'.format(ip=SERVER_IP)
 AUTHORITY_URL = 'https://login.microsoftonline.com/common'
 AUTH_ENDPOINT = '/oauth2/v2.0/authorize'
 TOKEN_ENDPOINT = '/oauth2/v2.0/token'
