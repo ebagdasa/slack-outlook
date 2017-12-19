@@ -100,6 +100,7 @@ def request_headers():
     return {'SdkVersion': 'sample-python-flask',
             'x-client-SKU': 'sample-python-flask',
             'client-request-id': str(uuid.uuid4()),
+            'Prefer': 'outlook.timezone="Eastern Standard Time"',
             'return-client-request-id': 'true'}
 
 def sendmail(client, subject=None, recipients=None, html=None, attachments=None):

@@ -17,3 +17,9 @@ def get_rooms_by_floor(floor):
                 room_list.append(room)
 
     return room_list
+
+
+def room_by_email(room_email):
+    a, b = room_email.split('@')
+    number = a.split('-')[-1]
+    return number
