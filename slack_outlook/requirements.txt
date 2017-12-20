@@ -3,3 +3,4 @@ Flask-OAuthlib>=0.9.4
 Requests>=2.18.4
 slackclient
 pytz
+tqdm

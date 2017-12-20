@@ -2,7 +2,7 @@ import multiprocessing
 import time
 from datetime import datetime, timedelta
 from multiprocessing import Process
-
+from tqdm import tqdm
 from classes.Member import Member
 from pytz import timezone
 
@@ -66,14 +66,16 @@ def rtm(token, queue):
 
     # create member dict
     members = list()
-    for x in sc.api_call('users.list')['members']:
-        members.append(Member(x['profile']['display_name'], x['profile']['real_name'], x['id']))
+    slack_api_members = sc.api_call('users.list')['members']
+    for x in slack_api_members:
+        name = x['profile']['display_name'] if x['profile']['display_name'] else x['profile']['real_name']
+        members.append(Member(name, x['profile']['real_name'], x['id']))
 
-    for x in members:
+    for x in tqdm(members):
         if x.display_name=='roomparking':
             room_parking_channel = x.user_id
             print(room_parking_channel)
-        if x.display_name=='ebagdasa':
+        if x.display_name=='eugene':
             res = sc.api_call('conversations.open', users=x.user_id)
             if not res.get('error', None):
                 x.channel_id = res['channel']['id']
@@ -92,16 +94,15 @@ def rtm(token, queue):
                     print('token', server_token)
                     channel_members[server_token[0]].token = server_token[1]
                     sc.rtm_send_message(server_token[0],
-                                        'Successful authentication! \n '
-                                        "Please use following commands: \n  ```list #floor  - gives the list of rooms for selected command (Ex: list 3)``` \n  ```book #room_no  -- book a room for next hour. (Ex: book 375)``` \n ```help  -- repeat the menu ``` \n ```cancel``` to cancel created by the bot meetings.")
+                                        'Successful authentication! \n {0}'.format(GREETING_TEXT))
                     print('authorized')
-                # if len(res) > 0:
-                #     print('res', res)
+                if len(res) > 0:
+                    print('res', res)
 
                 if len(res)> 0  and res[0].get('channel', None) in channel_members.keys() and res[0].get('type', None) == 'message' and res[0].get('user', None) != room_parking_channel:
                     member = channel_members[res[0].get('channel', None)]
                     if not member.token:
-                        sc.rtm_send_message(member.channel_id, 'Hello {name}! To continue authorize with Cornell Office 365 account: \n Click here: {ip}?user={channel} \n Use your Cornell Email (netid@cornell.edu).'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id))
+                        sc.rtm_send_message(member.channel_id, 'Hello, {name}! This is the Room Booking app for Bloomberg Center at CornellTech.\nIt can help you quickly book any room for the next hour. This app will create new meeting on your calendar and invite the selected room. \n To continue please authorize with your Cornell Office 365 account: \n Click here: {ip}?user={channel} \n Use your Cornell Email (netid@cornell.edu).'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id))
 
                     else:
                         token = member.token
@@ -115,20 +116,21 @@ def rtm(token, queue):
                                     continue
                                 elif int(words) in range(1,len(member.state['data'])+1):
                                     event = member.state['data'][int(words)-1]
-                                    sc.rtm_send_message(member.channel_id, event['id'])
+                                    # sc.rtm_send_message(member.channel_id, event['id'])
                                     res = MSGRAPH.delete('me/events/' + event['id'], data=None, format='json', headers=request_headers())
                                     if res.status == 204:
                                         sc.rtm_send_message(member.channel_id, 'Successfully deleted meeting.')
                                         member.state['data'].pop(int(words)-1)
+                                        response_res = list()
                                         if len(member.state['data'])>0:
                                             for pos, x in enumerate(member.state['data']):
-                                                res.append(
+                                                response_res.append(
                                                     '{4}. Meeting at {0}. Starting at {1} until {2} (timezone: {3})'.format(
                                                         x['location']['displayName'], x["start"]['dateTime'],
                                                         x["end"]['dateTime'], x['end']['timeZone'], pos + 1))
                                             sc.rtm_send_message(member.channel_id,
                                                                 'Here are the remaining meetings found for your account: \n {0} \n. Please respond with position of the meeting. Ex: ```1``` If only one meeting, please still type: 1. To exit the cancelling submenu type exit.'.format(
-                                                                    '\n'.join(res)))
+                                                                    '\n'.join(response_res)))
                                         else:
                                             sc.rtm_send_message(member.channel_id, 'Returning back to the main menu.')
                                             member.state=None
@@ -161,7 +163,7 @@ def rtm(token, queue):
 
 
                                 if words[0].lower() == 'help':
-                                    sc.rtm_send_message(member.channel_id, "Please use following commands: \n  ```list #floor  - gives the list of rooms``` \n  ```book #room_no  -- book a room for next hour``` \n ```help  -- repeat the menu ```")
+                                    sc.rtm_send_message(member.channel_id, GREETING_TEXT)
 
 
                                 elif words[0].lower() == 'cancel':
@@ -178,16 +180,16 @@ def rtm(token, queue):
                                     if len(meetings_by_bot)>0:
                                         member.state = {'state':'cancel', 'data': meetings_by_bot}
 
-                                        res = list()
+                                        response_res = list()
                                         for pos, x in enumerate(meetings_by_bot):
-                                            res.append('{4}. Meeting at {0}. Starting at {1} until {2} (timezone: {3})'.format(x['location']['displayName'], x["start"]['dateTime'], x["end"]['dateTime'], x['end']['timeZone'], pos+1))
+                                            response_res.append('{4}. Meeting at {0}. Starting at {1} until {2} (timezone: {3})'.format(x['location']['displayName'], x["start"]['dateTime'], x["end"]['dateTime'], x['end']['timeZone'], pos+1))
                                         sc.rtm_send_message(member.channel_id,
-                                                            'Here are the meetings found for your account: \n {0} \n. Please respond with position of the meeting. Ex: ```1``` If only one meeting, please still type: 1. To exit the cancelling submenu type exit.'.format('\n'.join(res)))
+                                                            'Here are the meetings found for your account: \n {0} \nPlease respond with the position of the meeting. Ex: ```1``` If only one meeting present, please still type: 1. To exit the cancelling submenu type exit.'.format('\n'.join(response_res)))
                                         print(meetings_by_bot)
                                         sc.rtm_send_message(member.channel_id, meetings_by_bot)
                                     else:
                                         sc.rtm_send_message(member.channel_id,
-                                                            'No meetings found for your account' )
+                                                            'No meetings created by our bot has been found for your account. Book some now! ' )
 
 
                                 elif words[0].lower()=='list':
@@ -199,7 +201,7 @@ def rtm(token, queue):
                                         raise ValueError('Floor is wrong use: 0, 1, 2, 3, 4')
                                     rooms = get_available_by_floor(floor, MSGRAPH, time_start, time_end)
                                     if rooms:
-                                        sc.rtm_send_message(member.channel_id, 'Available rooms on {0} floor: \n {1}'.format(words[1], ','.join(rooms)))
+                                        sc.rtm_send_message(member.channel_id, 'Available rooms on {0} floor: \n {1} \nCheck Michael Wilber\'s nice visualization of available rooms: https://cornell-tech-rooms.herokuapp.com'.format(words[1], ','.join(rooms)))
                                     else:
                                         sc.rtm_send_message(member.channel_id,
                                                             'There are no available rooms on floor # {0}'.format(floor))
