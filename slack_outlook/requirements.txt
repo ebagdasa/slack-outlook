@@ -4,3 +4,7 @@ Requests>=2.18.4
 slackclient
 pytz
 tqdm
+Flask-SQLAlchemy
+Flask-Migrate
+Flask-Script
+psycopg2

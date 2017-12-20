@@ -2,9 +2,8 @@ import multiprocessing
 import time
 from datetime import datetime, timedelta
 from multiprocessing import Process
-from tqdm import tqdm
-from classes.Member import Member
 from pytz import timezone
+import requests
 
 eastern = timezone('US/Eastern')
 
@@ -16,10 +15,12 @@ from oauth_app import *
 from slackclient import SlackClient
 from config import *
 
-slack_token = SLACK_TOKEN
-sc = SlackClient(slack_token)
+import json
+
 multiprocessing.Process()
 
+
+def refresh_token()
 
 def is_available_now(room_full, time_start, time_end):
 
@@ -31,10 +32,11 @@ def is_available_now(room_full, time_start, time_end):
                              headers=request_headers()).data
     if msft_resp.get('error', None):
         print(msft_resp)
+        return {'result': 'error', 'data': msft_resp}
     if len(msft_resp.get('meetingTimeSuggestions', list())) == 0:
-        return False
+        return {'result': 'success', 'data': False}
     else:
-        return True
+        return {'result': 'success', 'data': True}
 
 def get_available_by_floor(floor, msg_graph, time_start, time_end):
     rooms = get_rooms_by_floor(floor)
@@ -45,18 +47,20 @@ def get_available_by_floor(floor, msg_graph, time_start, time_end):
 
     if msft_resp.get('error', None):
         print(msft_resp)
+        return {'result': 'error', 'data': msft_resp}
     elif len(msft_resp['meetingTimeSuggestions']) > 0:
         for x in msft_resp['meetingTimeSuggestions'][0]["attendeeAvailability"]:
             if x["availability"] == "free":
                 available_rooms.append(room_by_email(x["attendee"]['emailAddress']['address']))
 
-    return available_rooms
+    return {'result': 'success', 'data': available_rooms}
 
 
 
 
-def rtm(token, queue):
-    print('rtm start')
+def rtm(token, queue, workspace, workspace_token):
+    sc = SlackClient(workspace_token)
+    print('rtm start for ', workspace)
     room_parking_channel = None
 
     @MSGRAPH.tokengetter
@@ -69,16 +73,23 @@ def rtm(token, queue):
     slack_api_members = sc.api_call('users.list')['members']
     for x in slack_api_members:
         name = x['profile']['display_name'] if x['profile']['display_name'] else x['profile']['real_name']
-        members.append(Member(name, x['profile']['real_name'], x['id']))
+        query_res = Member.get_by_user_workspace(x['id'], workspace)
+        if query_res:
+            member = query_res
+        else:
+            member = Member(name, x['profile']['real_name'], x['id'], workspace)
+            member.add()
+        members.append(member)
 
-    for x in tqdm(members):
+    for x in members:
         if x.display_name=='roomparking':
             room_parking_channel = x.user_id
             print(room_parking_channel)
-        if x.display_name=='eugene':
+        elif not x.channel_id:
             res = sc.api_call('conversations.open', users=x.user_id)
             if not res.get('error', None):
                 x.channel_id = res['channel']['id']
+                x.update()
 
     channel_members = dict()
     for x in members:
@@ -92,55 +103,72 @@ def rtm(token, queue):
                 if not queue.empty():
                     server_token = queue.get()
                     print('token', server_token)
-                    channel_members[server_token[0]].token = server_token[1]
-                    sc.rtm_send_message(server_token[0],
-                                        'Successful authentication! \n {0}'.format(GREETING_TEXT))
-                    print('authorized')
-                if len(res) > 0:
-                    print('res', res)
+                    if channel_members.get(server_token[0], False) and workspace==server_token[2]:
+                        channel_members[server_token[0]].token = server_token[1]
+                        channel_members[server_token[0]].update()
+                        sc.rtm_send_message(server_token[0],
+                                            'Successful authentication! \n {0}'.format(GREETING_TEXT))
+                        print('authorized')
+                    else:
+                        print('not my token')
+                        queue.put(server_token)
+                        time.sleep(2)
+                # if len(res) > 0:
+                #     print('res', res)
 
                 if len(res)> 0  and res[0].get('channel', None) in channel_members.keys() and res[0].get('type', None) == 'message' and res[0].get('user', None) != room_parking_channel:
                     member = channel_members[res[0].get('channel', None)]
                     if not member.token:
-                        sc.rtm_send_message(member.channel_id, 'Hello, {name}! This is the Room Booking app for Bloomberg Center at CornellTech.\nIt can help you quickly book any room for the next hour. This app will create new meeting on your calendar and invite the selected room. \n To continue please authorize with your Cornell Office 365 account: \n Click here: {ip}?user={channel} \n Use your Cornell Email (netid@cornell.edu).'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id))
+                        sc.rtm_send_message(member.channel_id,
+                                            'Hello, {name}! This is the Room Booking app for Bloomberg Center at CornellTech.\n'
+                                            'It can help you quickly book any room for the next hour. This app will create new meeting on your calendar and invite the selected room. \n'
+                                            'To continue please authorize with your Cornell Office 365 account: \n Click here: {ip}?user={channel}&workspace={workspace} \n'
+                                            'Use your Cornell Email (netid@cornell.edu).'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id, workspace=workspace))
 
                     else:
                         token = member.token
                         print('booking for ', member.display_name)
-
-                        if member.state and member.state['state'] == 'cancel':
+                        member_state = None
+                        if member.state:
+                            member_state = json.loads(member.state)
+                        if member_state and member_state['state'] == 'cancel':
                             try:
                                 words = res[0]['text']
                                 if words=='exit':
                                     member.state = None
+                                    member.update()
+                                    sc.rtm_send_message(member.channel_id, GREETING_TEXT)
                                     continue
-                                elif int(words) in range(1,len(member.state['data'])+1):
-                                    event = member.state['data'][int(words)-1]
+                                elif int(words) in range(1,len(member_state['data'])+1):
+
+                                    event = member_state['data'][int(words)-1]
                                     # sc.rtm_send_message(member.channel_id, event['id'])
                                     res = MSGRAPH.delete('me/events/' + event['id'], data=None, format='json', headers=request_headers())
                                     if res.status == 204:
                                         sc.rtm_send_message(member.channel_id, 'Successfully deleted meeting.')
-                                        member.state['data'].pop(int(words)-1)
+                                        member_state['data'].pop(int(words)-1)
                                         response_res = list()
-                                        if len(member.state['data'])>0:
-                                            for pos, x in enumerate(member.state['data']):
-                                                response_res.append(
-                                                    '{4}. Meeting at {0}. Starting at {1} until {2} (timezone: {3})'.format(
-                                                        x['location']['displayName'], x["start"]['dateTime'],
-                                                        x["end"]['dateTime'], x['end']['timeZone'], pos + 1))
+                                        if len(member_state['data'])>0:
+                                            for pos, x in enumerate(member_state['data']):
+
+                                                response_res.append('{4}. Meeting at {0}. Starting at {1} until {2} (timezone: {3})'.format(x['location'], x["start"], x["end"], x['timeZone'], pos+1))
+
                                             sc.rtm_send_message(member.channel_id,
-                                                                'Here are the remaining meetings found for your account: \n {0} \n. Please respond with position of the meeting. Ex: ```1``` If only one meeting, please still type: 1. To exit the cancelling submenu type exit.'.format(
+                                                                'Here are the remaining meetings found for your account: \n {0} \n. Please respond with position of the meeting. Ex: ```1``` If only one meeting is presented, please still type: 1.\nTo exit cancellation submenu type ```exit```'.format(
                                                                     '\n'.join(response_res)))
                                         else:
                                             sc.rtm_send_message(member.channel_id, 'Returning back to the main menu.')
+                                            sc.rtm_send_message(member.channel_id, GREETING_TEXT)
                                             member.state=None
 
                                     else:
-                                        sc.rtm_send_message(member.channel_id, 'Error deleted meeting:')
+                                        sc.rtm_send_message(member.channel_id, 'Error deleting meeting:')
                                         sc.rtm_send_message(member.channel_id, res.data)
                                 else:
-                                    raise ValueError('Please put number from 1 to {0}.'.format(len(member.state['data'])))
+                                    raise ValueError('Please put number from 1 to {0}.'.format(len(member_state['data'])))
 
+                                member.state = json.dumps(member_state) if member_state else None
+                                member.update()
                             except Exception as e:
                                 print(e)
                                 sc.rtm_send_message(member.channel_id, e.args[0])
@@ -174,15 +202,19 @@ def rtm(token, queue):
                                     if len(msft_resp.get('value', list()))>0:
                                         for x in msft_resp['value']:
                                             if x['bodyPreview'] == "This event is created by RoomParking Slackbot, contact Eugene (eugene@cs.cornell.edu) for help.":
-                                                meetings_by_bot.append(x)
-                                                sc.rtm_send_message(member.channel_id, x)
+                                                meetings_by_bot.append(get_meeting_info(x))
+                                                sc.rtm_send_message(member.channel_id, get_meeting_info(x))
                                                 print(x)
                                     if len(meetings_by_bot)>0:
-                                        member.state = {'state':'cancel', 'data': meetings_by_bot}
+                                        dumped_state = json.dumps({'state':'cancel', 'data': meetings_by_bot})
+                                        if len(dumped_state)>3000:
+                                            raise ValueError('Sorry there are too many meetings created that we can\'t handle at once please delete them manually.' )
+                                        member.state = dumped_state
+                                        member.update()
 
                                         response_res = list()
                                         for pos, x in enumerate(meetings_by_bot):
-                                            response_res.append('{4}. Meeting at {0}. Starting at {1} until {2} (timezone: {3})'.format(x['location']['displayName'], x["start"]['dateTime'], x["end"]['dateTime'], x['end']['timeZone'], pos+1))
+                                            response_res.append('{4}. Meeting at {0}. Starting at {1} until {2} (timezone: {3})'.format(x['location'], x["start"], x["end"], x['timeZone'], pos+1))
                                         sc.rtm_send_message(member.channel_id,
                                                             'Here are the meetings found for your account: \n {0} \nPlease respond with the position of the meeting. Ex: ```1``` If only one meeting present, please still type: 1. To exit the cancelling submenu type exit.'.format('\n'.join(response_res)))
                                         print(meetings_by_bot)
@@ -200,11 +232,19 @@ def rtm(token, queue):
                                     if floor not in [0, 1, 2, 3, 4]:
                                         raise ValueError('Floor is wrong use: 0, 1, 2, 3, 4')
                                     rooms = get_available_by_floor(floor, MSGRAPH, time_start, time_end)
-                                    if rooms:
-                                        sc.rtm_send_message(member.channel_id, 'Available rooms on {0} floor: \n {1} \nCheck Michael Wilber\'s nice visualization of available rooms: https://cornell-tech-rooms.herokuapp.com'.format(words[1], ','.join(rooms)))
+                                    if rooms['result']=='success':
+                                        if rooms['data']:
+                                            sc.rtm_send_message(member.channel_id, 'Available rooms on floor #{0}: \n {1}'.format(words[1], ','.join(rooms['data']))) #  \n\nCheck Michael Wilber\'s nice visualization of available rooms: https://cornell-tech-rooms.herokuapp.com
+                                        else:
+                                            sc.rtm_send_message(member.channel_id,
+                                                                'There are no available rooms on floor #{0}'.format(floor))
                                     else:
-                                        sc.rtm_send_message(member.channel_id,
-                                                            'There are no available rooms on floor # {0}'.format(floor))
+                                        if rooms['data']['error']['message']=='Access token has expired.':
+                                            member.token = None
+                                            member.update()
+                                            sc.rtm_send_message(member.channel_id, 'Token is expired, please login again.')
+                                        else:
+                                            sc.rtm_send_message(member.channel_id, rooms['data'])
                                     continue
 
                                 elif words[0].lower()=='book':
@@ -212,10 +252,19 @@ def rtm(token, queue):
                                     room = words[1]
                                     print(room)
                                     room_full = get_room_by_no(room)
+                                    occupied =  is_available_now(room_full, time_start, time_end)
+                                    if occupied['result']=='sucess':
+                                        if len(occupied['data'])==0:
+                                            sc.rtm_send_message(member.channel_id, 'Room is already occupied.')
+                                            continue
+                                    else:
+                                        if occupied['data']['error']['message']=='Access token has expired.':
+                                            member.token = None
+                                            member.update()
+                                            sc.rtm_send_message(member.channel_id, 'Token is expired, please login again.')
+                                        else:
+                                            sc.rtm_send_message(member.channel_id, occupied['data'])
 
-                                    if not is_available_now(room_full, time_start, time_end):
-                                        sc.rtm_send_message(member.channel_id, 'Room is already occupied.')
-                                        continue
 
                                     book_json = create_booking_json(user=member.first_name,
                                                                     room=room_full,
@@ -248,8 +297,10 @@ def rtm(token, queue):
 
 
 if __name__ == '__main__':
+    db.create_all()
+    for tokens in SLACK_TOKENS:
+        p = Process(target=rtm, args=(token, queue, tokens['name'], tokens['token']))
+        p.start()
 
-    p = Process(target=rtm, args=(token, queue))
-    p.start()
     APP.run(use_reloader=False, host='0.0.0.0', port=8000)
     print(APP.config)

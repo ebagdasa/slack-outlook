@@ -12,7 +12,7 @@ TOKEN_ENDPOINT = '/oauth2/v2.0/token'
 
 RESOURCE = 'https://graph.microsoft.com/'
 API_VERSION = 'beta'
-GREETING_TEXT =  "Please use following commands: ```list floor_no  -- show the list of available rooms on floor_no. (Ex: list 3)```\n```book room_no  -- book room_no for the next hour. (Ex:  book 375) ```\n```help  -- repeat the menu ``` \n ```cancel -- to cancel created by the bot meetings```"
+GREETING_TEXT =  "Please use following commands: ```list [floor#]   -- show the list of available rooms on [floor#]. (Ex: list 3)```\n```book [room#]  -- book [room#] for the next hour. (Ex:  book 375) ```\n```help  -- repeat the menu ``` \n ```cancel -- to cancel created by the bot meetings```"
 
 
 # This code can be removed after configuring CLIENT_ID and CLIENT_SECRET above.

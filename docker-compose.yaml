@@ -27,7 +27,7 @@ services:
     links:
       - database
     volumes:
-      - "./ancile-slackbot/retrieved:/usr/src/app/retrieved"
+      - "./migrations:/usr/src/app/ancile/slackbot/migrations"
 
   
   database:

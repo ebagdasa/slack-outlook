@@ -23,3 +23,18 @@ def room_by_email(room_email):
     a, b = room_email.split('@')
     number = a.split('-')[-1]
     return number
+
+
+def parse_time_room(iso_datetime):
+    date_normal, iso_time = iso_datetime.split('T')
+    hour, minute, _ = iso_time.split(':')
+    return '{0} {1}:{2}'.format(date_normal, hour, minute)
+
+
+def get_meeting_info(meeting):
+    id = meeting['id']
+    start =  parse_time_room(meeting["start"]['dateTime'])
+    end = parse_time_room(meeting["end"]['dateTime'])
+    location = meeting['location']['displayName']
+    timeZone = meeting['end']['timeZone']
+    return {'id': id, 'start': start, 'end': end, 'location':location, 'timeZone': timeZone}
