@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 from multiprocessing import Process
 from pytz import timezone
 import requests
-
+import dateutil.parser
+import traceback
 eastern = timezone('US/Eastern')
 
 # from flask import request
@@ -20,7 +21,16 @@ import json
 multiprocessing.Process()
 
 
-def refresh_token()
+def check_token(member):
+
+    data = {'grant_type': 'refresh_token', 'refresh_token': member.token, 'client_id': CLIENT_ID,
+            'client_secret': CLIENT_SECRET}
+    response = requests.post(AUTHORITY_URL+TOKEN_ENDPOINT, data)
+    print(response)
+    member.token = response['access_token']
+    member.refresh_token = response['refresh_token']
+    member.expires = datetime.now(eastern) + timedelta(seconds=response['expires_in'])
+    member.update()
 
 def is_available_now(room_full, time_start, time_end):
 
@@ -103,10 +113,16 @@ def rtm(token, queue, workspace, workspace_token):
                 if not queue.empty():
                     server_token = queue.get()
                     print('token', server_token)
-                    if channel_members.get(server_token[0], False) and workspace==server_token[2]:
-                        channel_members[server_token[0]].token = server_token[1]
-                        channel_members[server_token[0]].update()
-                        sc.rtm_send_message(server_token[0],
+                    member = channel_members.get(server_token['channel'], False)
+                    if member and workspace==server_token['workspace']:
+
+                        member.token = server_token['access_token']
+                        member.refresh_token = server_token['refresh_token']
+                        member.expires = server_token['expires']
+                        print('expires', eastern.localize(member.expires), ' ', member.display_name)
+                        member.update()
+
+                        sc.rtm_send_message(member.channel_id,
                                             'Successful authentication! \n {0}'.format(GREETING_TEXT))
                         print('authorized')
                     else:
@@ -122,12 +138,15 @@ def rtm(token, queue, workspace, workspace_token):
                         sc.rtm_send_message(member.channel_id,
                                             'Hello, {name}! This is the Room Booking app for Bloomberg Center at CornellTech.\n'
                                             'It can help you quickly book any room for the next hour. This app will create new meeting on your calendar and invite the selected room. \n'
-                                            'To continue please authorize with your Cornell Office 365 account: \n Click here: {ip}?user={channel}&workspace={workspace} \n'
+                                            'To continue please authorize with your Cornell Office 365 account: \n Click here: {ip}?channel={channel}&workspace={workspace} \n'
                                             'Use your Cornell Email (netid@cornell.edu).'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id, workspace=workspace))
-
+                    elif member.token and member.expires and eastern.localize(member.expires)<=datetime.now(eastern):
+                        print('checking for new token')
+                        check_token(member)
                     else:
                         token = member.token
                         print('booking for ', member.display_name)
+
                         member_state = None
                         if member.state:
                             member_state = json.loads(member.state)
@@ -158,9 +177,9 @@ def rtm(token, queue, workspace, workspace_token):
                                                                     '\n'.join(response_res)))
                                         else:
                                             sc.rtm_send_message(member.channel_id, 'Returning back to the main menu.')
+                                            member.state = None
+                                            member.update()
                                             sc.rtm_send_message(member.channel_id, GREETING_TEXT)
-                                            member.state=None
-
                                     else:
                                         sc.rtm_send_message(member.channel_id, 'Error deleting meeting:')
                                         sc.rtm_send_message(member.channel_id, res.data)
@@ -201,7 +220,9 @@ def rtm(token, queue, workspace, workspace_token):
                                     meetings_by_bot = list()
                                     if len(msft_resp.get('value', list()))>0:
                                         for x in msft_resp['value']:
-                                            if x['bodyPreview'] == "This event is created by RoomParking Slackbot, contact Eugene (eugene@cs.cornell.edu) for help.":
+                                            end_date_time = eastern.localize(dateutil.parser.parse(x['end']['dateTime']))
+                                            if x['bodyPreview'] == "This event is created by RoomParking Slackbot, " \
+                                                                   "contact Eugene (eugene@cs.cornell.edu) for help." and end_date_time > datetime.now(eastern):
                                                 meetings_by_bot.append(get_meeting_info(x))
                                                 sc.rtm_send_message(member.channel_id, get_meeting_info(x))
                                                 print(x)
@@ -252,35 +273,37 @@ def rtm(token, queue, workspace, workspace_token):
                                     room = words[1]
                                     print(room)
                                     room_full = get_room_by_no(room)
-                                    occupied =  is_available_now(room_full, time_start, time_end)
-                                    if occupied['result']=='sucess':
-                                        if len(occupied['data'])==0:
+                                    available =  is_available_now(room_full, time_start, time_end)
+                                    if available['result']=='success':
+                                        if not available['data']:
                                             sc.rtm_send_message(member.channel_id, 'Room is already occupied.')
                                             continue
+                                        else:
+                                            book_json = create_booking_json(user=member.first_name,
+                                                                            room=room_full,
+                                                                            time_start=time_start.isoformat(),
+                                                                            time_end=time_end.isoformat())
+                                            msft_resp = MSGRAPH.post("me/calendar/events", data=book_json, format='json',
+                                                                    headers=request_headers()).data
+                                            if msft_resp.get('error'):
+                                                raise SystemError(msft_resp)
+                                            print(msft_resp)
+                                            sc.rtm_send_message(member.channel_id,
+                                                                'The room {4} is booked from {0}:{1:02d} to {2}:{3:02d}.'.format(time_start.hour,
+                                                                                                                            time_start.minute,
+                                                                                                                            time_end.hour,
+                                                                                                                            time_end.minute,
+                                                                                                                            room))
                                     else:
-                                        if occupied['data']['error']['message']=='Access token has expired.':
+                                        if available['data']=='Access token has expired.':
                                             member.token = None
+                                            member.expires = None
+                                            member.refresh_token = None
                                             member.update()
                                             sc.rtm_send_message(member.channel_id, 'Token is expired, please login again.')
                                         else:
-                                            sc.rtm_send_message(member.channel_id, occupied['data'])
+                                            sc.rtm_send_message(member.channel_id, available['data'])
 
-
-                                    book_json = create_booking_json(user=member.first_name,
-                                                                    room=room_full,
-                                                                    time_start=time_start.isoformat(),
-                                                                    time_end=time_end.isoformat())
-                                    msft_resp = MSGRAPH.post("me/calendar/events", data=book_json, format='json',
-                                                            headers=request_headers()).data
-                                    if msft_resp.get('error'):
-                                        raise SystemError(msft_resp)
-                                    print(msft_resp)
-                                    sc.rtm_send_message(member.channel_id,
-                                                        'The room {4} is booked from {0}:{1:02d} to {2}:{3:02d}.'.format(time_start.hour,
-                                                                                                                    time_start.minute,
-                                                                                                                    time_end.hour,
-                                                                                                                    time_end.minute,
-                                                                                                                    room))
                                 else:
                                     raise ValueError('No commands were matched.')
 

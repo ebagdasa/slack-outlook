@@ -21,6 +21,7 @@ APP.debug = True
 APP.host = config.SERVER_IP
 APP.secret_key = 'development'
 APP.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://{0}:{0}@database:5432/{0}'.format('postgres')
+APP.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # APP.config['SQLALCHEMY_ECHO'] = True
 db = SQLAlchemy(APP)
 OAUTH = OAuth(APP)
@@ -57,15 +58,15 @@ class Base(db.Model):
 
 class Member(Base):
     floor = db.Column(db.Integer)
-    display_name = db.Column(db.String(80), nullable=False)
-    first_name = db.Column(db.String(80), nullable=False)
+    display_name = db.Column(db.String(250), nullable=False)
+    first_name = db.Column(db.String(250), nullable=False)
     user_id = db.Column(db.String(80), nullable=False)
     channel_id = db.Column(db.String(80), nullable=True)
     token = db.Column(db.String(3000), nullable=True)
     state = db.Column(db.String(3000), nullable=True)
-    workspace = db.Column(db.String(80), nullable=False)
+    workspace = db.Column(db.String(120), nullable=False)
     refresh_token = db.Column(db.String(3000), nullable=True)
-    expires =
+    expires = db.Column(db.DateTime, nullable=True)
 
 
     def __init__(self, dn, fn, uid, workspace):
@@ -86,7 +87,7 @@ def login():
     """Prompt user to authenticate."""
 
 
-    flask.session['state'] = request.values['user'] + '________' + request.values['workspace']
+    flask.session['state'] = request.values['channel'] + '________' + request.values['workspace']
     return MSGRAPH.authorize(callback=config.REDIRECT_URI, state=flask.session['state'])
 
 @APP.route('/login/authorized')
@@ -99,9 +100,10 @@ def authorized():
     flask.session['access_token'] = response['access_token']
     print(response['refresh_token'])
     token['access'] = response['access_token']
-    state, workspace = flask.session['state'].split('________')
-    expires = datetime.now() + timedelta(seconds=int(response['expires_in']))
-    queue.put((state, workspace, response['access_token'], response['refresh_token'], expires))
+    channel, workspace = flask.session['state'].split('________')
+    expires = datetime.now(eastern) + timedelta(seconds=int(response['expires_in']))
+    queue.put({'channel': channel, 'workspace': workspace, 'access_token': response['access_token'],
+                'refresh_token': response['refresh_token'], 'expires': expires})
     # room_data = MSGRAPH.get("me/findRooms(RoomList='CT-Bloomberg@groups.cornell.edu')", headers=request_headers()).data
 
     return flask.render_template('success.html')
