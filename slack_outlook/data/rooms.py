@@ -1,4 +1,9 @@
 from secret import rooms
+import pytz
+from datetime import datetime
+import dateutil.parser
+eastern = pytz.timezone('US/Eastern')
+
 
 def get_room_by_no(no):
 

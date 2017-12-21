@@ -119,7 +119,7 @@ def rtm(token, queue, workspace, workspace_token):
                         member.token = server_token['access_token']
                         member.refresh_token = server_token['refresh_token']
                         member.expires = server_token['expires']
-                        print('expires', eastern.localize(member.expires), ' ', member.display_name)
+                        print('expires', member.expires, ' ', member.display_name)
                         member.update()
 
                         sc.rtm_send_message(member.channel_id,
@@ -140,7 +140,7 @@ def rtm(token, queue, workspace, workspace_token):
                                             'It can help you quickly book any room for the next hour. This app will create new meeting on your calendar and invite the selected room. \n'
                                             'To continue please authorize with your Cornell Office 365 account: \n Click here: {ip}?channel={channel}&workspace={workspace} \n'
                                             'Use your Cornell Email (netid@cornell.edu).'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id, workspace=workspace))
-                    elif member.token and member.expires and eastern.localize(member.expires)<=datetime.now(eastern):
+                    elif member.token and member.expires and eastern.localize(member.expires)<=datetime.now(eastern)+timedelta(minutes=30):
                         print('checking for new token')
                         check_token(member)
                     else:
@@ -177,8 +177,8 @@ def rtm(token, queue, workspace, workspace_token):
                                                                     '\n'.join(response_res)))
                                         else:
                                             sc.rtm_send_message(member.channel_id, 'Returning back to the main menu.')
-                                            member.state = None
-                                            member.update()
+                                            member_state = None
+
                                             sc.rtm_send_message(member.channel_id, GREETING_TEXT)
                                     else:
                                         sc.rtm_send_message(member.channel_id, 'Error deleting meeting:')
