@@ -7,7 +7,7 @@ import requests
 import dateutil.parser
 import traceback
 eastern = timezone('US/Eastern')
-
+utc = timezone('UTC')
 # from flask import request
 # import flask
 from data.rooms import *
@@ -23,14 +23,25 @@ multiprocessing.Process()
 
 def check_token(member):
 
-    data = {'grant_type': 'refresh_token', 'refresh_token': member.token, 'client_id': CLIENT_ID,
+    data = {'grant_type': 'refresh_token', 'refresh_token': member.refresh_token, 'client_id': CLIENT_ID,
             'client_secret': CLIENT_SECRET}
+
+    print(data)
     response = requests.post(AUTHORITY_URL+TOKEN_ENDPOINT, data)
     print(response)
-    member.token = response['access_token']
-    member.refresh_token = response['refresh_token']
-    member.expires = datetime.now(eastern) + timedelta(seconds=response['expires_in'])
-    member.update()
+    if response.status_code==200:
+        js_data = json.loads(response.text)
+        member.token = js_data['access_token']
+        member.refresh_token = js_data['refresh_token']
+        member.expires = datetime.now(eastern) + timedelta(seconds=js_data['expires_in'])
+        member.update()
+        return True
+    else:
+        member.token=None
+        member.refresh_token = None
+        member.expires = None
+        member.update()
+        return False
 
 def is_available_now(room_full, time_start, time_end):
 
@@ -134,15 +145,20 @@ def rtm(token, queue, workspace, workspace_token):
 
                 if len(res)> 0  and res[0].get('channel', None) in channel_members.keys() and res[0].get('type', None) == 'message' and res[0].get('user', None) != room_parking_channel:
                     member = channel_members[res[0].get('channel', None)]
+                    # sc.rtm_send_message(member.channel_id, '{0}, {1}, {2}, {3}'.format(member.expires, utc.localize(member.expires),(datetime.now(utc)+timedelta(hours=1)), eastern.localize(member.expires)<=(datetime.now(utc)+timedelta(hours=1))))
+                    if member.token and member.expires and utc.localize(member.expires)<=datetime.now(utc):
+                        print('checking for new token')
+                        if not check_token(member):
+                            sc.rtm_send_message(member.channel_id, 'Couldn\'t update token. Please login again.')
+                        else:
+                            print('updated token! for ', member.display_name)
+                            # sc.rtm_send_message(member.channel_id, 'updated token succesfully.')
                     if not member.token:
                         sc.rtm_send_message(member.channel_id,
                                             'Hello, {name}! This is the Room Booking app for Bloomberg Center at CornellTech.\n'
                                             'It can help you quickly book any room for the next hour. This app will create new meeting on your calendar and invite the selected room. \n'
                                             'To continue please authorize with your Cornell Office 365 account: \n Click here: {ip}?channel={channel}&workspace={workspace} \n'
                                             'Use your Cornell Email (netid@cornell.edu).'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id, workspace=workspace))
-                    elif member.token and member.expires and eastern.localize(member.expires)<=datetime.now(eastern)+timedelta(minutes=30):
-                        print('checking for new token')
-                        check_token(member)
                     else:
                         token = member.token
                         print('booking for ', member.display_name)
@@ -252,10 +268,12 @@ def rtm(token, queue, workspace, workspace_token):
                                         floor = int(words[1])
                                     if floor not in [0, 1, 2, 3, 4]:
                                         raise ValueError('Floor is wrong use: 0, 1, 2, 3, 4')
+                                    sc.rtm_send_message(member.channel_id,
+                                                        'Looking for available rooms...')
                                     rooms = get_available_by_floor(floor, MSGRAPH, time_start, time_end)
                                     if rooms['result']=='success':
                                         if rooms['data']:
-                                            sc.rtm_send_message(member.channel_id, 'Available rooms on floor #{0}: \n {1}'.format(words[1], ','.join(rooms['data']))) #  \n\nCheck Michael Wilber\'s nice visualization of available rooms: https://cornell-tech-rooms.herokuapp.com
+                                            sc.rtm_send_message(member.channel_id, 'Available rooms on floor #{0}: \n {1}'.format(floor, ','.join(rooms['data']))) #  \n\nCheck Michael Wilber\'s nice visualization of available rooms: https://cornell-tech-rooms.herokuapp.com
                                         else:
                                             sc.rtm_send_message(member.channel_id,
                                                                 'There are no available rooms on floor #{0}'.format(floor))
