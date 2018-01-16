@@ -95,14 +95,22 @@ def authorized():
     """Handler for the application's Redirect Uri."""
     print(flask.request)
     if str(flask.session['state']) != str(flask.request.args['state']):
-        raise Exception('state returned to redirect URL does not match!')
-    response = MSGRAPH.authorized_response()
+        return flask.render_template('error.html')
+    try:
+        response = MSGRAPH.authorized_response()
+    except Exception as e:
+        print(e)
+        return flask.render_template('error.html')
+    channel, workspace = flask.session['state'].split('________')
+
+    if not (response.get('access_token', False) or response.get('refresh_token', False)):
+        queue.put({'channel': channel, 'workspace': workspace, 'status': 'error' })
+        return flask.render_template('error.html')
     flask.session['access_token'] = response['access_token']
     print(response['refresh_token'])
     token['access'] = response['access_token']
-    channel, workspace = flask.session['state'].split('________')
     expires = datetime.now(eastern) + timedelta(seconds=int(response['expires_in']))
-    queue.put({'channel': channel, 'workspace': workspace, 'access_token': response['access_token'],
+    queue.put({'channel': channel, 'workspace': workspace, 'access_token': response['access_token'], 'status': 'success',
                 'refresh_token': response['refresh_token'], 'expires': expires})
     # room_data = MSGRAPH.get("me/findRooms(RoomList='CT-Bloomberg@groups.cornell.edu')", headers=request_headers()).data
 

@@ -6,6 +6,9 @@ from pytz import timezone
 import requests
 import dateutil.parser
 import traceback
+
+from websocket import WebSocketConnectionClosedException
+
 eastern = timezone('US/Eastern')
 utc = timezone('UTC')
 # from flask import request
@@ -120,12 +123,21 @@ def rtm(token, queue, workspace, workspace_token):
     with APP.test_request_context():
         if sc.rtm_connect():
             while True:
-                res = sc.rtm_read()
+                try:
+                    res = sc.rtm_read()
+                # processing, etc
+                except WebSocketConnectionClosedException:
+                    print('Connecitons was closed. Restarting.')
+                    sc.rtm_connect()
+                    continue
+
                 if not queue.empty():
                     server_token = queue.get()
                     print('token', server_token)
                     member = channel_members.get(server_token['channel'], False)
-                    if member and workspace==server_token['workspace']:
+                    if server_token['status']=='error' or (not server_token.get('access_token', False)) or (not server_token.get('refresh_token', False)):
+                        sc.rtm_send_message(server_token['channel'], 'Sorry there was a problem please try again.')
+                    if member and workspace==server_token['workspace'] :
 
                         member.token = server_token['access_token']
                         member.refresh_token = server_token['refresh_token']
@@ -140,12 +152,19 @@ def rtm(token, queue, workspace, workspace_token):
                         print('not my token')
                         queue.put(server_token)
                         time.sleep(2)
-                # if len(res) > 0:
-                #     print('res', res)
+                if len(res) > 0 and type(res[0].get('channel', None)) is not str:
+                    print('res', res)
+                    continue
 
-                if len(res)> 0  and res[0].get('channel', None) in channel_members.keys() and res[0].get('type', None) == 'message' and res[0].get('user', None) != room_parking_channel:
+                if len(res) > 0 and res[0].get('channel', None) in channel_members.keys() and res[0].get('type', None) == 'message' and res[0].get('user', None) != room_parking_channel:
                     member = channel_members[res[0].get('channel', None)]
                     # sc.rtm_send_message(member.channel_id, '{0}, {1}, {2}, {3}'.format(member.expires, utc.localize(member.expires),(datetime.now(utc)+timedelta(hours=1)), eastern.localize(member.expires)<=(datetime.now(utc)+timedelta(hours=1))))
+                    if res[0]['text'].lower()=='delete token':
+                        member.token = None
+                        member.refresh_token = None
+                        member.expires = None
+                        member.update()
+
                     if member.token and member.expires and utc.localize(member.expires)<=datetime.now(utc):
                         print('checking for new token')
                         if not check_token(member):
@@ -232,7 +251,7 @@ def rtm(token, queue, workspace, workspace_token):
                                 elif words[0].lower() == 'cancel':
 
                                     msft_resp = MSGRAPH.get("me/events", headers=request_headers()).data
-                                    print(msft_resp)
+                                    # print(msft_resp)
                                     meetings_by_bot = list()
                                     if len(msft_resp.get('value', list()))>0:
                                         for x in msft_resp['value']:
@@ -241,7 +260,7 @@ def rtm(token, queue, workspace, workspace_token):
                                                                    "contact Eugene (eugene@cs.cornell.edu) for help." and end_date_time > datetime.now(eastern):
                                                 meetings_by_bot.append(get_meeting_info(x))
                                                 sc.rtm_send_message(member.channel_id, get_meeting_info(x))
-                                                print(x)
+                                                # print(x)
                                     if len(meetings_by_bot)>0:
                                         dumped_state = json.dumps({'state':'cancel', 'data': meetings_by_bot})
                                         if len(dumped_state)>3000:
@@ -267,19 +286,20 @@ def rtm(token, queue, workspace, workspace_token):
                                     else:
                                         floor = int(words[1])
                                     if floor not in [0, 1, 2, 3, 4]:
-                                        raise ValueError('Floor is wrong use: 0, 1, 2, 3, 4')
+                                        raise ValueError('Floor is wrong. Use: 0, 1, 2, 3, 4')
                                     sc.rtm_send_message(member.channel_id,
                                                         'Looking for available rooms...')
                                     rooms = get_available_by_floor(floor, MSGRAPH, time_start, time_end)
                                     if rooms['result']=='success':
                                         if rooms['data']:
-                                            sc.rtm_send_message(member.channel_id, 'Available rooms on floor #{0}: \n {1}'.format(floor, ','.join(rooms['data']))) #  \n\nCheck Michael Wilber\'s nice visualization of available rooms: https://cornell-tech-rooms.herokuapp.com
+                                            sc.rtm_send_message(member.channel_id, 'Available rooms on floor #{0}: \n {1}. \n (VC - Video Conferencing, D - Display)'.format(floor, ','.join(rooms['data']))) #  \n\nCheck Michael Wilber\'s nice visualization of available rooms: https://cornell-tech-rooms.herokuapp.com
                                         else:
                                             sc.rtm_send_message(member.channel_id,
                                                                 'There are no available rooms on floor #{0}'.format(floor))
                                     else:
                                         if rooms['data']['error']['message']=='Access token has expired.':
                                             member.token = None
+                                            member.refresh_token = None
                                             member.update()
                                             sc.rtm_send_message(member.channel_id, 'Token is expired, please login again.')
                                         else:

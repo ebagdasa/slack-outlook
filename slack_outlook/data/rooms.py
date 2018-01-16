@@ -25,9 +25,11 @@ def get_rooms_by_floor(floor):
 
 
 def room_by_email(room_email):
-    a, b = room_email.split('@')
-    number = a.split('-')[-1]
-    return number
+    for room in rooms:
+        if room["address"] == room_email:
+            return ' '.join(room['name'].split()[3:])
+
+    return 'No room found for {0}.'.format(room_email)
 
 
 def parse_time_room(iso_datetime):
