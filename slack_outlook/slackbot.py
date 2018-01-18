@@ -308,9 +308,22 @@ def rtm(token, queue, workspace, workspace_token):
 
                                 elif words[0].lower()=='book':
 
+
+                                    if len(words)==1:
+                                        sc.rtm_send_message(member.channel_id, 'Please specify room number, like: "book 375".')
+                                        continue
                                     room = words[1]
                                     print(room)
                                     room_full = get_room_by_no(room)
+                                    if not room_full:
+                                        sc.rtm_send_message(member.channel_id, 'Room not found. Try "list {floor_id}" to get rooms.')
+                                        continue
+
+                                    if room=='367':
+                                        sc.rtm_send_message(member.channel_id,
+                                                            'Somehow room 367 cannot be booked. It is not in the Outlook Calendar. I will raise a ticket to IT about it. \n Eugene')
+                                        continue
+
                                     available =  is_available_now(room_full, time_start, time_end)
                                     if available['result']=='success':
                                         if not available['data']:
