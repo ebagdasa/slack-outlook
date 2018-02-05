@@ -126,8 +126,9 @@ def rtm(token, queue, workspace, workspace_token):
                 try:
                     res = sc.rtm_read()
                 # processing, etc
-                except WebSocketConnectionClosedException:
+                except (WebSocketConnectionClosedException, TimeoutError) as  e:
                     print('Connecitons was closed. Restarting.')
+                    print(e.args)
                     sc.rtm_connect()
                     continue
 
@@ -155,10 +156,15 @@ def rtm(token, queue, workspace, workspace_token):
                 if len(res) > 0 and type(res[0].get('channel', None)) is not str:
                     print('res', res)
                     continue
+                # if len(res) > 0:
+                #     print(res)
 
                 if len(res) > 0 and res[0].get('channel', None) in channel_members.keys() and res[0].get('type', None) == 'message' and res[0].get('user', None) != room_parking_channel:
                     member = channel_members[res[0].get('channel', None)]
                     # sc.rtm_send_message(member.channel_id, '{0}, {1}, {2}, {3}'.format(member.expires, utc.localize(member.expires),(datetime.now(utc)+timedelta(hours=1)), eastern.localize(member.expires)<=(datetime.now(utc)+timedelta(hours=1))))
+                    if not res[0].get('text', False) or res[0].get('subtype') and res[0]['subtype'] == 'bot_message':
+                        continue
+
                     if res[0]['text'].lower()=='delete token':
                         member.token = None
                         member.refresh_token = None
@@ -232,8 +238,10 @@ def rtm(token, queue, workspace, workspace_token):
 
                                 ### autocomplete time
                                 time_start = datetime.now(eastern)
-                                if time_start.minute >= 30:
+                                if time_start.minute >= 20 and time_start.minute<50:
                                     time_start = time_start.replace(microsecond=0, second=0, minute=30, tzinfo=None)
+                                elif time_start.minute>=50:
+                                    time_start = time_start.replace(microsecond=0, second=0, minute=0, hour=time_start.hour+1, tzinfo=None)
                                 else:
                                     time_start = time_start.replace(microsecond=0, second=0, minute=0, tzinfo=None)
 
@@ -247,6 +255,12 @@ def rtm(token, queue, workspace, workspace_token):
                                 if words[0].lower() == 'help':
                                     sc.rtm_send_message(member.channel_id, GREETING_TEXT)
 
+                                elif words[0].lower()== 'where':
+                                    if len(words)>1 and words[1] in room_no:
+                                        sc.rtm_send_message(member.channel_id, 'https://roomparking.cornelltech.io/rooms/{0}.jpg'.format(words[1]))
+                                    else:
+                                        sc.rtm_send_message(member.channel_id,
+                                                            'Wrong input. Try ```where 375```')
 
                                 elif words[0].lower() == 'cancel':
 
@@ -312,6 +326,25 @@ def rtm(token, queue, workspace, workspace_token):
                                     if len(words)==1:
                                         sc.rtm_send_message(member.channel_id, 'Please specify room number, like: "book 375".')
                                         continue
+
+                                    if len(words)==3:
+                                        time_new = words[2]
+                                        if 'pm' == time_new[-2:]:
+                                            time_hour = int(time_new[:-2]) + 12
+                                        elif 'am' == time_new[-2:]:
+                                            time_hour = int(time_new[:-2])
+                                        else:
+                                            raise ValueError('If you want to specify time for booking. Follow this example: ```book 375 11am``` or ```book 375 2pm``` The room will be booked for one hour starting the time you posted.')
+
+                                        # sc.rtm_send_message(member.channel_id, time_start.isoformat())
+                                        # sc.rtm_send_message(member.channel_id, time_end.isoformat())
+
+                                        time_start = time_start.replace(microsecond=0, second=0, minute=0, hour=time_hour, tzinfo=None)
+                                        time_end = time_start + timedelta(hours=1)
+                                        # sc.rtm_send_message(member.channel_id, time_start.isoformat())
+                                        # sc.rtm_send_message(member.channel_id, time_end.isoformat())
+
+
                                     room = words[1]
                                     print(room)
                                     room_full = get_room_by_no(room)
@@ -327,7 +360,8 @@ def rtm(token, queue, workspace, workspace_token):
                                     available =  is_available_now(room_full, time_start, time_end)
                                     if available['result']=='success':
                                         if not available['data']:
-                                            sc.rtm_send_message(member.channel_id, 'Room is already occupied.')
+                                            sc.rtm_send_message(member.channel_id, 'Room is already occupied!')
+                                            sc.rtm_send_message(member.channel_id, available)
                                             continue
                                         else:
                                             book_json = create_booking_json(user=member.first_name,
@@ -362,7 +396,7 @@ def rtm(token, queue, workspace, workspace_token):
                             except Exception as e:
                                 print(e)
                                 sc.rtm_send_message(member.channel_id,  e.args[0])
-                                sc.rtm_send_message(member.channel_id, 'Try: ```book 397``` or ```list 4```')
+                                sc.rtm_send_message(member.channel_id, 'Try: ```help``` or ```book 397``` or ```list 4``` or ```book 375 2pm```')
 
         else:
             print("Connection Failed")

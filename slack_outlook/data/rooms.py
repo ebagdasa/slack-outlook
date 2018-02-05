@@ -45,3 +45,7 @@ def get_meeting_info(meeting):
     location = meeting['location']['displayName']
     timeZone = meeting['end']['timeZone']
     return {'id': id, 'start': start, 'end': end, 'location':location, 'timeZone': timeZone}
+
+
+def where_room():
+    return
