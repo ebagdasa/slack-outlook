@@ -6,6 +6,7 @@ from pytz import timezone
 import requests
 import dateutil.parser
 import traceback
+import logging
 
 from websocket import WebSocketConnectionClosedException
 
