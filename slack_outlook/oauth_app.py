@@ -27,16 +27,16 @@ db = SQLAlchemy(APP)
 OAUTH = OAuth(APP)
 token = dict()
 queue = Queue()
-MSGRAPH = OAUTH.remote_app(
-    'microsoft',
-    consumer_key=config.CLIENT_ID,
-    consumer_secret=config.CLIENT_SECRET,
-    request_token_params={'scope': config.SCOPES},
-    base_url=config.RESOURCE + config.API_VERSION + '/',
-    request_token_url=None,
-    access_token_method='POST',
-    access_token_url=config.AUTHORITY_URL + config.TOKEN_ENDPOINT,
-    authorize_url=config.AUTHORITY_URL + config.AUTH_ENDPOINT)
+# MSGRAPH = OAUTH.remote_app(
+#     'microsoft',
+#     consumer_key=config.CLIENT_ID,
+#     consumer_secret=config.CLIENT_SECRET,
+#     request_token_params={'scope': config.SCOPES},
+#     base_url=config.RESOURCE + config.API_VERSION + '/',
+#     request_token_url=None,
+#     access_token_method='POST',
+#     access_token_url=config.AUTHORITY_URL + config.TOKEN_ENDPOINT,
+#     authorize_url=config.AUTHORITY_URL + config.AUTH_ENDPOINT)
 
 
 class Base(db.Model):
@@ -56,7 +56,7 @@ class Base(db.Model):
         db.session.delete(self)
         return db.session.commit()
 
-class Member(Base):
+class Student(Base):
     floor = db.Column(db.Integer)
     display_name = db.Column(db.String(250), nullable=False)
     first_name = db.Column(db.String(250), nullable=False)
@@ -77,50 +77,63 @@ class Member(Base):
 
     @staticmethod
     def get_by_user_workspace(user_id, workspace):
-        res = Member.query.filter_by(user_id=user_id, workspace=workspace).first()
+        res = Student.query.filter_by(user_id=user_id, workspace=workspace).first()
         return res if res else None
 
+@APP.route('/request')
+def request():
+    print('request')
+    queue.put('successfully received')
+    return (200, 'sucess')
 
 
-@APP.route('/')
-def login():
-    """Prompt user to authenticate."""
+@APP.route('/data_load')
+def data_load():
+    print('request')
+    queue.put('successfully received')
 
 
-    flask.session['state'] = request.values['channel'] + '________' + request.values['workspace']
-    return MSGRAPH.authorize(callback=config.REDIRECT_URI, state=flask.session['state'])
-
-@APP.route('/login/authorized')
-def authorized():
-    """Handler for the application's Redirect Uri."""
-    print(flask.request)
-    if str(flask.session['state']) != str(flask.request.args['state']):
-        return flask.render_template('error.html')
-    try:
-        response = MSGRAPH.authorized_response()
-    except Exception as e:
-        print(e)
-        return flask.render_template('error.html')
-    channel, workspace = flask.session['state'].split('________')
-
-    if not (response.get('access_token', False) or response.get('refresh_token', False)):
-        queue.put({'channel': channel, 'workspace': workspace, 'status': 'error' })
-        return flask.render_template('error.html')
-    flask.session['access_token'] = response['access_token']
-    print(response['refresh_token'])
-    token['access'] = response['access_token']
-    expires = datetime.now(eastern) + timedelta(seconds=int(response['expires_in']))
-    queue.put({'channel': channel, 'workspace': workspace, 'access_token': response['access_token'], 'status': 'success',
-                'refresh_token': response['refresh_token'], 'expires': expires})
-    # room_data = MSGRAPH.get("me/findRooms(RoomList='CT-Bloomberg@groups.cornell.edu')", headers=request_headers()).data
-
-    return flask.render_template('success.html')
-
-
-def request_headers():
-    """Return dictionary of default HTTP headers for Graph API calls."""
-    return {'SdkVersion': 'sample-python-flask',
-            'x-client-SKU': 'sample-python-flask',
-            'client-request-id': str(uuid.uuid4()),
-            'Prefer': 'outlook.timezone="Eastern Standard Time"',
-            'return-client-request-id': 'true'}
+#
+#
+# @APP.route('/')
+# def login():
+#     """Prompt user to authenticate."""
+#
+#
+#     flask.session['state'] = request.values['channel'] + '________' + request.values['workspace']
+#     return MSGRAPH.authorize(callback=config.REDIRECT_URI, state=flask.session['state'])
+#
+# @APP.route('/login/authorized')
+# def authorized():
+#     """Handler for the application's Redirect Uri."""
+#     print(flask.request)
+#     if str(flask.session['state']) != str(flask.request.args['state']):
+#         return flask.render_template('error.html')
+#     try:
+#         response = MSGRAPH.authorized_response()
+#     except Exception as e:
+#         print(e)
+#         return flask.render_template('error.html')
+#     channel, workspace = flask.session['state'].split('________')
+#
+#     if not (response.get('access_token', False) or response.get('refresh_token', False)):
+#         queue.put({'channel': channel, 'workspace': workspace, 'status': 'error' })
+#         return flask.render_template('error.html')
+#     flask.session['access_token'] = response['access_token']
+#     print(response['refresh_token'])
+#     token['access'] = response['access_token']
+#     expires = datetime.now(eastern) + timedelta(seconds=int(response['expires_in']))
+#     queue.put({'channel': channel, 'workspace': workspace, 'access_token': response['access_token'], 'status': 'success',
+#                 'refresh_token': response['refresh_token'], 'expires': expires})
+#     # room_data = MSGRAPH.get("me/findRooms(RoomList='CT-Bloomberg@groups.cornell.edu')", headers=request_headers()).data
+#
+#     return flask.render_template('success.html')
+#
+#
+# def request_headers():
+#     """Return dictionary of default HTTP headers for Graph API calls."""
+#     return {'SdkVersion': 'sample-python-flask',
+#             'x-client-SKU': 'sample-python-flask',
+#             'client-request-id': str(uuid.uuid4()),
+#             'Prefer': 'outlook.timezone="Eastern Standard Time"',
+#             'return-client-request-id': 'true'}
