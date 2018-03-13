@@ -10,6 +10,7 @@ RUN apt-get update \
 		less \
 	&& rm -rf /var/lib/apt/lists/*
 
+
 WORKDIR /usr/src/app
 COPY ./requirements.txt ./
 RUN pip install -r requirements.txt

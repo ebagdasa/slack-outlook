@@ -1,6 +1,7 @@
 FROM nginx:1.13.0
 
 RUN apt-get update --assume-yes
+RUN apt-get install vim less -y
 RUN apt-get install certbot --assume-yes
 
 RUN mkdir -p /var/www/letsencrypt
@@ -9,8 +10,8 @@ RUN mkdir -p /etc/letsencrypt/configs/
 RUN mkdir -p /var/log/letsencrypt/
 RUN mkdir -p /usr/src
 
-# COPY nginx-http.conf /etc/nginx/nginx-http.conf
-COPY nginx-https.conf /etc/nginx/nginx.conf
+COPY nginx-http.conf /etc/nginx/nginx.conf
+#COPY nginx-https.conf /etc/nginx/nginx.conf
 # COPY nginx-http.conf /etc/nginx/nginx.conf
 
 COPY serve /etc/nginx/html/

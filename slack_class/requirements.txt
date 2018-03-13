@@ -1,0 +1,11 @@
+Flask>=0.12.2
+Flask-OAuthlib>=0.9.4
+Requests>=2.18.4
+slackclient
+pytz
+tqdm
+Flask-SQLAlchemy==2.3.2
+SQLAlchemy==1.1.15
+Flask-Migrate
+Flask-Script
+psycopg2

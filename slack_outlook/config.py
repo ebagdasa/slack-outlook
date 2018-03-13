@@ -5,7 +5,7 @@ other secure storage mechanism.
 """
 from secret import *
 
-REDIRECT_URI = '{ip}/login/authorized'.format(ip=SERVER_IP)
+REDIRECT_URI = '{ip}/outlook/login/authorized'.format(ip=SERVER_IP)
 AUTHORITY_URL = 'https://login.microsoftonline.com/common'
 AUTH_ENDPOINT = '/oauth2/v2.0/authorize'
 TOKEN_ENDPOINT = '/oauth2/v2.0/token'
