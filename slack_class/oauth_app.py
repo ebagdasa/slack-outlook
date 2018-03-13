@@ -21,7 +21,7 @@ APP = flask.Flask(__name__, template_folder='static/templates')
 APP.debug = True
 APP.host = config.SERVER_IP
 APP.secret_key = 'development'
-APP.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://{0}:{0}@database:5432/{0}'.format('postgres')
+APP.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://{0}:{0}@database_class:5432/{0}'.format('postgres')
 APP.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(APP)

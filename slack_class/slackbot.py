@@ -102,6 +102,7 @@ def rtm(token, queue, workspace, workspace_token):
                                     attachments=message_test['attachments'])
 
                 elif not queue.empty():
+                    current_time = eastern.fromutc(datetime.datetime.today())
                     msg = queue.get()
                     print(msg)
                     try:
@@ -119,13 +120,18 @@ def rtm(token, queue, workspace, workspace_token):
                         print('error')
 
                 else:
-                    time.sleep(10)
+                    time.sleep(120)
                     print('sleeping')
-                    current_time = datetime.datetime.today()
-                    if current_time.weekday() in (0,6) and current_time.hour == 22:
-                        for x in members:
+                    current_time = eastern.fromutc(datetime.datetime.today())
+
+                    print('success')
+                    for x in members:
+                        if x.remind<current_time.timestamp():
                             sc.api_call('chat.postMessage', channel=x.channel_id, text=message_test['text'],
-                                        attachments=message_test['attachments'])
+                                            attachments=message_test['attachments'])
+
+                            x.remind = current_time.timestamp()+20
+
 
 
 
@@ -134,7 +140,7 @@ def rtm(token, queue, workspace, workspace_token):
 
 
 if __name__ == '__main__':
-    # db.create_all()
+    db.create_all()
     for tokens in SLACK_TOKENS:
         p = Process(target=rtm, args=(token, queue, tokens['name'], tokens['token']))
         p.start()
