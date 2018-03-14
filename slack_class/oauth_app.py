@@ -58,7 +58,8 @@ class Member(Base):
     workspace = db.Column(db.String(120), nullable=False)
     refresh_token = db.Column(db.String(3000), nullable=True)
     expires = db.Column(db.DateTime, nullable=True)
-    remind = db.Column(db.Integer, nullable=True)
+    remind = db.Column(db.DateTime,  default=db.func.current_timestamp())
+
 
 
     def __init__(self, dn, fn, uid, workspace):
@@ -76,6 +77,11 @@ class Member(Base):
 class Reminder(Base):
     user_id = db.Column(db.String(80), nullable=False)
     action = db.Column(db.String(80), nullable=False)
+
+
+    def __init__(self, user, action):
+        self.user_id = user
+        self.action = action
 
 
 @APP.route('/request_proc', methods = ['GET', 'POST'])

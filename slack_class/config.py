@@ -50,7 +50,7 @@ message_test = {
                             "value": "360"
                         },
                         {
-                            "text": "Never remind me",
+                            "text": "Don't disturb for a week.",
                             "value": "never"
                         },
                     ]
