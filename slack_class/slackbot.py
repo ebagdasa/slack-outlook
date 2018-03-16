@@ -26,22 +26,23 @@ multiprocessing.Process()
 import time
 from datetime import datetime, timedelta
 
-day_1 = 2
-day_2 = 5
-hour = 10
+DAY_1 = 1
+DAY_2 = 5
+HOUR = 17
+FORMAT_STRING = '%a, %b %d, %I:%M%p'
 
 
 def get_next_reminder(current_time):
 
     distance_days = 0
-    if current_time.weekday()<day_1  or (current_time.weekday()==day_1 and current_time.hour<hour):
-        distance_days = day_1 - current_time.weekday()
-    elif current_time.weekday()<day_2 or (current_time.weekday()==day_2 and current_time.hour<hour):
-        distance_days = day_2 - current_time.weekday()
-    elif current_time.weekday()>=day_2:
-        distance_days = day_1 + current_time.weekday()
+    if current_time.weekday()<DAY_1  or (current_time.weekday()==DAY_1 and current_time.hour<HOUR):
+        distance_days = DAY_1 - current_time.weekday()
+    elif current_time.weekday()<DAY_2 or (current_time.weekday()==DAY_2 and current_time.hour<HOUR):
+        distance_days = DAY_2 - current_time.weekday()
+    elif current_time.weekday()>=DAY_2:
+        distance_days = DAY_2 + current_time.weekday()
 
-    target_day = current_time.replace(hour=hour, minute=0, second=0) + timedelta(days=distance_days)
+    target_day = current_time.replace(hour=HOUR, minute=0, second=0) + timedelta(days=distance_days)
 
     return target_day
 
@@ -66,13 +67,13 @@ def rtm(token, queue, workspace, workspace_token):
     slack_api_members = sc.api_call('users.list')['members']
     current_time = eastern.fromutc(datetime.today())
     for x in slack_api_members:
-        # if x['is_bot']:
-        #     continue
-
-        if x['id'] not in ('U3G50LK24', 'U3SCWQWM6', 'U3G67S117'):
+        if x['is_bot']:
             continue
 
-        name = x['profile']['display_name'] if x['profile']['display_name'] else x['profile']['real_name']
+        if x['id'] not in ('U8ZRT58TX', 'U8W4XS6EM', 'U8W4T2X6D'):
+            continue
+
+        name = x['profile']['real_name'] if x['profile']['real_name'] else x['profile']['display_name']
         query_res = Member.get_by_user_workspace(x['id'], workspace)
         if query_res:
             member = query_res
@@ -95,6 +96,8 @@ def rtm(token, queue, workspace, workspace_token):
             res = sc.api_call('conversations.open', users=x.user_id)
             if not res.get('error', None):
                 x.channel_id = res['channel']['id']
+                sc.api_call('chat.postMessage', channel=x.channel_id,
+                                    text='Hey! I am the Slackbot for the BEtech class! I will remind you to do your monday and wed readings on Sat, and Tues 5pm respectively :) ! \n Please ask <@U8W4XS6EM|fabian> if you have any questions.')
                 x.update()
 
     channel_members = dict()
@@ -109,6 +112,7 @@ def rtm(token, queue, workspace, workspace_token):
 
                 current_time = eastern.fromutc(datetime.today())
 
+
                 try:
                     res = sc.rtm_read()
                 # processing, etc
@@ -118,17 +122,29 @@ def rtm(token, queue, workspace, workspace_token):
                     sc.rtm_connect()
                     continue
 
-
-
-
                 if len(res)>0:
                     print(res)
-                    if res[0].get('channel', False) in list(channel_members.keys()) and res[0].get('text', False)=='help':
+
+                    if res[0].get('channel', False) in list(channel_members.keys()) and res[0].get('text', False)=='abcd_help':
                         print(res[0]['channel'], res[0]['text'])
 
                         sc.api_call('chat.postMessage', channel=res[0]['channel'], text=message_test['text'],
                                     attachments=message_test['attachments'])
 
+                    elif res[0].get('channel', False) in list(channel_members.keys()) and res[0].get('text',
+                                                                                                   False) == 'abcd_remind':
+                        member = Member.get_by_user_workspace(res[0]['user'], workspace)
+                        sc.api_call('chat.postMessage', channel=res[0]['channel'],
+                                    text=eastern.fromutc(member.remind).strftime(FORMAT_STRING))
+                        sc.api_call('chat.postMessage', channel=res[0]['channel'],
+                                    text=current_time.strftime(FORMAT_STRING))
+                        sc.api_call('chat.postMessage', channel=res[0]['channel'],
+                                    text='{0}'.format(datetime.today()))
+
+                    # elif res[0].get('channel', False) in list(channel_members.keys()) and res[0].get('text',
+                    #                                                                                  False) and res[0].get(''):
+                    #     sc.api_call('chat.postMessage', channel=res[0]['channel'],
+                    #                 text='Sorry I did not understand what you said. Please ask <@U8W4XS6EM|fabian> for details.')
                 elif not queue.empty():
 
                     msg = queue.get()
@@ -143,6 +159,8 @@ def rtm(token, queue, workspace, workspace_token):
                         member = Member.get_by_user_workspace(user_id, workspace)
                         if actions['type'] == 'button':
                             status = actions['value']
+                            # if actions['value']:
+                            #     sc.api_call('chat.postMessage', channel=member.channel_id, text='<#C9HQF457W|readings>')
                             member.remind = get_next_reminder(current_time)
                         else:
                             status = actions['selected_options'][0]['value']
@@ -155,7 +173,7 @@ def rtm(token, queue, workspace, workspace_token):
 
                         member.update()
                         sc.api_call('chat.postMessage', channel=channel_id,
-                                    text='Thank you, next reminder will be on: {0}'.format((eastern.fromutc(member.remind)).strftime('%c')))
+                                    text='Thank you, the next reminder will be on: {0}'.format((eastern.fromutc(member.remind)).strftime(FORMAT_STRING)))
 
                         new_action = Reminder(user_name, status)
                         new_action.add()
@@ -178,7 +196,7 @@ def rtm(token, queue, workspace, workspace_token):
                             x.remind = get_next_reminder(current_time)
                             x.update()
 
-                    time.sleep(4)
+                    time.sleep(1)
 
 
 

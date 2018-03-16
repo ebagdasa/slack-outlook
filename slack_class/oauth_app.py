@@ -15,7 +15,7 @@ from flask_oauthlib.client import OAuth
 from flask import jsonify
 import config
 from flask_sqlalchemy import SQLAlchemy
-
+import json
 
 APP = flask.Flask(__name__, template_folder='static/templates')
 APP.debug = True
@@ -86,9 +86,29 @@ class Reminder(Base):
 
 @APP.route('/request_proc', methods = ['GET', 'POST'])
 def request_proc():
-    print(request.form)
+    # print(request.form)
     queue.put(request.form)
-    return jsonify(config.message_respond)
+    loaded_msg = json.loads(request.form['payload'])
+    # print(loaded_msg)
+    actions = loaded_msg['actions'][0]
+    msg = config.message_respond
+    if actions['type'] == 'button':
+        if actions['value']=='now':
+            msg = config.message_respond_read
+        elif actions['value']=='done':
+            msg = config.message_respond
+    else:
+        status = actions['selected_options'][0]['value']
+        if status=='never':
+            msg = config.message_respond
+        elif status=='30':
+            msg = config.message_alarm_30
+        elif status=='180':
+            msg = config.message_alarm_3
+        elif status=='360':
+            msg = config.message_alarm_6
+
+    return jsonify(msg)
 
 
 

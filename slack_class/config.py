@@ -72,3 +72,57 @@ message_respond = {
         }
     ]
 }
+
+message_alarm_3 = {
+    "text": "Hi! remember to do your readings for tomorrow!",
+    "attachments": [
+        {
+            "text": "Please press a button to response \n :alarm_clock: We will remind you in 3 hours.",
+            "fallback": "You are unable to choose a game",
+            "callback_id": "wopr_game",
+            "color": "#3AA3E3",
+            "attachment_type": "default",
+        }
+    ]
+}
+
+message_alarm_6 = {
+    "text": "Hi! remember to do your readings for tomorrow!",
+    "attachments": [
+        {
+            "text": "Please press a button to response \n :alarm_clock: We will remind you in 6 hours.",
+            "fallback": "You are unable to choose a game",
+            "callback_id": "wopr_game",
+            "color": "#3AA3E3",
+            "attachment_type": "default",
+        }
+    ]
+}
+message_alarm_30 = {
+    "text": "Hi! remember to do your readings for tomorrow!",
+    "attachments": [
+        {
+            "text": "Please press a button to response \n :alarm_clock: We will remind you in 30 minutes.",
+            "fallback": "You are unable to choose a game",
+            "callback_id": "wopr_game",
+            "color": "#3AA3E3",
+            "attachment_type": "default",
+        }
+    ]
+}
+
+
+
+
+message_respond_read = {
+    "text": "Hi! remember to do your readings for tomorrow!",
+    "attachments": [
+        {
+            "text": "Please press a button to response \n :thumbsup: Great! Go to channel <#C9HQF457W|readings>",
+            "fallback": "You are unable to choose a game",
+            "callback_id": "wopr_game",
+            "color": "#3AA3E3",
+            "attachment_type": "default",
+        }
+    ]
+}
