@@ -101,6 +101,8 @@ def request_proc():
         status = actions['selected_options'][0]['value']
         if status=='never':
             msg = config.message_respond
+        elif status=='tomorrow':
+            msg = config.message_alarm_tomorrow
         elif status=='30':
             msg = config.message_alarm_30
         elif status=='180':

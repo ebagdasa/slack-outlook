@@ -26,18 +26,18 @@ multiprocessing.Process()
 import time
 from datetime import datetime, timedelta
 
-DAY_1 = 1
+# DAY_1 = 1
 DAY_2 = 5
-HOUR = 17
+HOUR = 10
 FORMAT_STRING = '%a, %b %d, %I:%M%p'
 
 
 def get_next_reminder(current_time):
 
     distance_days = 0
-    if current_time.weekday()<DAY_1  or (current_time.weekday()==DAY_1 and current_time.hour<HOUR):
-        distance_days = DAY_1 - current_time.weekday()
-    elif current_time.weekday()<DAY_2 or (current_time.weekday()==DAY_2 and current_time.hour<HOUR):
+    # if current_time.weekday()<DAY_1  or (current_time.weekday()==DAY_1 and current_time.hour<HOUR):
+    #     distance_days = DAY_1 - current_time.weekday()
+    if current_time.weekday()<DAY_2 or (current_time.weekday()==DAY_2 and current_time.hour<HOUR):
         distance_days = DAY_2 - current_time.weekday()
     elif current_time.weekday()>=DAY_2:
         distance_days = DAY_2 + current_time.weekday()
@@ -97,7 +97,9 @@ def rtm(token, queue, workspace, workspace_token):
             if not res.get('error', None):
                 x.channel_id = res['channel']['id']
                 sc.api_call('chat.postMessage', channel=x.channel_id,
-                                    text='Hey! I am the Slackbot for the BEtech class! I will remind you to do your monday and wed readings on Sat, and Tues 5pm respectively :) ! \n Please ask <@U8W4XS6EM|fabian> if you have any questions.')
+                                    text='Hey! I am the Slackbot for the BEtech class! I will remind you to do your monday readings. :) ! \n Please ask <@U8W4XS6EM|fabian> if you have any questions!')
+                sc.api_call('chat.postMessage', channel=x.channel_id, text=message_test['text'],
+                            attachments=message_test['attachments'])
                 x.update()
 
     channel_members = dict()
@@ -167,7 +169,9 @@ def rtm(token, queue, workspace, workspace_token):
                             if status=='never':
                                 # sc.api_call('chat.postMessage', channel=channel_id,
                                 #             text='We will not remind you until the next week.')
-                                member.remind = get_next_reminder(current_time) + timedelta(days=7)
+                                member.remind = get_next_reminder(current_time)
+                            elif status=='tomorrow':
+                                member.remind = current_time + timedelta(days=1)
                             else:
                                 member.remind = current_time + timedelta(minutes=int(status))
 
