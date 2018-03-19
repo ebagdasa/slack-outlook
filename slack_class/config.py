@@ -9,7 +9,7 @@ from secret import *
 
 
 message_test = {
-    "text": "Hi! remember to do your readings for tomorrow!",
+    "text": "Hi! remember to do your readings for Monday's class!",
     "attachments": [
         {
             "text": "Please press a button to response",
@@ -65,7 +65,7 @@ message_test = {
 }
 
 message_respond = {
-    "text": "Hi! remember to do your readings for tomorrow!",
+    "text": "Hi! remember to do your readings for Monday's class!",
     "attachments": [
         {
             "text": "Please press a button to response \n :white_check_mark: Thank you!",
@@ -78,7 +78,7 @@ message_respond = {
 }
 
 message_alarm_3 = {
-    "text": "Hi! remember to do your readings for tomorrow!",
+    "text": "Hi! remember to do your readings for Monday's class!",
     "attachments": [
         {
             "text": "Please press a button to response \n :alarm_clock: We will remind you in 3 hours.",
@@ -91,7 +91,7 @@ message_alarm_3 = {
 }
 
 message_alarm_6 = {
-    "text": "Hi! remember to do your readings for tomorrow!",
+    "text": "Hi! remember to do your readings for Monday's class!",
     "attachments": [
         {
             "text": "Please press a button to response \n :alarm_clock: We will remind you in 6 hours.",
@@ -103,7 +103,7 @@ message_alarm_6 = {
     ]
 }
 message_alarm_30 = {
-    "text": "Hi! remember to do your readings for tomorrow!",
+    "text": "Hi! remember to do your readings for Monday's class!",
     "attachments": [
         {
             "text": "Please press a button to response \n :alarm_clock: We will remind you in 30 minutes.",
@@ -116,7 +116,7 @@ message_alarm_30 = {
 }
 
 message_alarm_tomorrow = {
-    "text": "Hi! remember to do your readings for tomorrow!",
+    "text": "Hi! remember to do your readings for Monday's class!",
     "attachments": [
         {
             "text": "Please press a button to response \n :alarm_clock: We will remind you tomorrow.",
@@ -132,7 +132,7 @@ message_alarm_tomorrow = {
 
 
 message_respond_read = {
-    "text": "Hi! remember to do your readings for tomorrow!",
+    "text": "Hi! remember to do your readings for Monday's class!",
     "attachments": [
         {
             "text": "Please press a button to response \n :thumbsup: Great! Go to channel <#C9HQF457W|readings>",

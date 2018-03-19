@@ -40,7 +40,7 @@ def get_next_reminder(current_time):
     if current_time.weekday()<DAY_2 or (current_time.weekday()==DAY_2 and current_time.hour<HOUR):
         distance_days = DAY_2 - current_time.weekday()
     elif current_time.weekday()>=DAY_2:
-        distance_days = DAY_2 + current_time.weekday()
+        distance_days = DAY_2 + (7-current_time.weekday())
 
     target_day = current_time.replace(hour=HOUR, minute=0, second=0) + timedelta(days=distance_days)
 
@@ -69,9 +69,11 @@ def rtm(token, queue, workspace, workspace_token):
     for x in slack_api_members:
         if x['is_bot']:
             continue
-
-        if x['id'] not in ('U8ZRT58TX', 'U8W4XS6EM', 'U8W4T2X6D'):
+        if x['id']=='USLACKBOT':
             continue
+
+        # if x['id'] in ('U8ZRT58TX', 'U8W4XS6EM', 'U8W4T2X6D'):
+        #     continue
 
         name = x['profile']['real_name'] if x['profile']['real_name'] else x['profile']['display_name']
         query_res = Member.get_by_user_workspace(x['id'], workspace)
@@ -186,7 +188,7 @@ def rtm(token, queue, workspace, workspace_token):
 
                 else:
 
-                    print('success')
+                    # print('success')
                     for x in members:
                         # sc.api_call('chat.postMessage', channel=x.channel_id, text=eastern.fromutc(x.remind))
                         # sc.api_call('chat.postMessage', channel=x.channel_id, text=current_time)
