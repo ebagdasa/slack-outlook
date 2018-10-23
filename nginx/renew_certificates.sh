@@ -1,6 +1,6 @@
 #!/bin/sh
 
-certbot --config /usr/src/ancile-slackbot.cornelltech.io.conf certonly --non-interactive --keep-until-expiring --agree-tos
+certbot --config /usr/src/roomparking.cornelltech.io.conf certonly --non-interactive --keep-until-expiring --agree-tos
 
 if [ $? -ne 0 ]
  then

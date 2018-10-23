@@ -18,29 +18,17 @@ services:
       - "./volumes/proxy/certs:/etc/nginx/certs:ro"
       - "./certs:/etc/letsencrypt"
       
-  slack_outlook:
-    environment:
-      DJANGO_MANAGEPY_MIGRATE: "on"
-    build:
-      context: ./slack_outlook
-      dockerfile: listen.Dockerfile
-    links:
-      - database
-    volumes:
-      - "./ancile-slackbot/retrieved:/usr/src/app/retrieved"
-  
   app:
     environment:
       DJANGO_MANAGEPY_MIGRATE: "on"
     build:
-      context: ./ancile-slackbot
+      context: ./slack_outlook
       dockerfile: Dockerfile
-    expose:
-      - "8000"
     links:
       - database
     volumes:
       - "./migrations:/usr/src/app/ancile/slackbot/migrations"
+
   
   database:
     image: postgres

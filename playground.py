@@ -1,5 +1,5 @@
 from slackclient import SlackClient
-
+from slack_outlook.secret import *
 slack_token = SLACK_TOKEN
 sc = SlackClient(slack_token)
 

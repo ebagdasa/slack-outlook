@@ -5,17 +5,25 @@ import base64
 import pprint
 import uuid
 from multiprocessing import Queue
-
+from datetime import datetime, timedelta
+import pytz
+eastern = pytz.timezone('US/Eastern')
 import flask
 from flask import request
 from flask_oauthlib.client import OAuth
 
-from slack_outlook import config
+import config
+from flask_sqlalchemy import SQLAlchemy
+
 
 APP = flask.Flask(__name__, template_folder='static/templates')
 APP.debug = True
 APP.host = config.SERVER_IP
 APP.secret_key = 'development'
+APP.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://{0}:{0}@database:5432/{0}'.format('postgres')
+APP.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# APP.config['SQLALCHEMY_ECHO'] = True
+db = SQLAlchemy(APP)
 OAUTH = OAuth(APP)
 token = dict()
 queue = Queue()
@@ -29,18 +37,57 @@ MSGRAPH = OAUTH.remote_app(
     access_token_method='POST',
     access_token_url=config.AUTHORITY_URL + config.TOKEN_ENDPOINT,
     authorize_url=config.AUTHORITY_URL + config.AUTH_ENDPOINT)
-#
-# @APP.route('/')
-# def homepage():
-#     """Render the home page."""
-#     return flask.render_template('homepage.html')
+
+
+class Base(db.Model):
+    __abstract__ = True
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    modified_at = db.Column(db.DateTime, default=db.func.current_timestamp(),
+                            onupdate=db.func.current_timestamp())
+    def add(self):
+        db.session.add(self)
+        return db.session.commit()
+
+    def update(self):
+        return db.session.commit()
+
+    def delete(self):
+        db.session.delete(self)
+        return db.session.commit()
+
+class Member(Base):
+    floor = db.Column(db.Integer)
+    display_name = db.Column(db.String(250), nullable=False)
+    first_name = db.Column(db.String(250), nullable=False)
+    user_id = db.Column(db.String(80), nullable=False)
+    channel_id = db.Column(db.String(80), nullable=True)
+    token = db.Column(db.String(3000), nullable=True)
+    state = db.Column(db.String(3000), nullable=True)
+    workspace = db.Column(db.String(120), nullable=False)
+    refresh_token = db.Column(db.String(3000), nullable=True)
+    expires = db.Column(db.DateTime, nullable=True)
+
+
+    def __init__(self, dn, fn, uid, workspace):
+        self.display_name = dn
+        self.first_name = fn
+        self.user_id = uid
+        self.workspace = workspace
+
+    @staticmethod
+    def get_by_user_workspace(user_id, workspace):
+        res = Member.query.filter_by(user_id=user_id, workspace=workspace).first()
+        return res if res else None
+
+
 
 @APP.route('/')
 def login():
     """Prompt user to authenticate."""
 
 
-    flask.session['state'] = request.values['user']
+    flask.session['state'] = request.values['channel'] + '________' + request.values['workspace']
     return MSGRAPH.authorize(callback=config.REDIRECT_URI, state=flask.session['state'])
 
 @APP.route('/login/authorized')
@@ -48,51 +95,26 @@ def authorized():
     """Handler for the application's Redirect Uri."""
     print(flask.request)
     if str(flask.session['state']) != str(flask.request.args['state']):
-        raise Exception('state returned to redirect URL does not match!')
-    response = MSGRAPH.authorized_response()
+        return flask.render_template('error.html')
+    try:
+        response = MSGRAPH.authorized_response()
+    except Exception as e:
+        print(e)
+        return flask.render_template('error.html')
+    channel, workspace = flask.session['state'].split('________')
+
+    if not (response.get('access_token', False) or response.get('refresh_token', False)):
+        queue.put({'channel': channel, 'workspace': workspace, 'status': 'error' })
+        return flask.render_template('error.html')
     flask.session['access_token'] = response['access_token']
+    print(response['refresh_token'])
     token['access'] = response['access_token']
-    queue.put((flask.session['state'], response['access_token']))
+    expires = datetime.now(eastern) + timedelta(seconds=int(response['expires_in']))
+    queue.put({'channel': channel, 'workspace': workspace, 'access_token': response['access_token'], 'status': 'success',
+                'refresh_token': response['refresh_token'], 'expires': expires})
     # room_data = MSGRAPH.get("me/findRooms(RoomList='CT-Bloomberg@groups.cornell.edu')", headers=request_headers()).data
 
     return flask.render_template('success.html')
-
-@APP.route('/mailform')
-def mailform():
-    """Sample form for sending email via Microsoft Graph."""
-    user_profile = MSGRAPH.get('me', headers=request_headers()).data
-    return flask.render_template('mailform.html',
-                                 name=user_profile['displayName'],
-                                 email=user_profile['userPrincipalName'])
-
-@APP.route('/book_room')
-def book_rooms():
-    """Sample form for sending email via Microsoft Graph."""
-
-    return None
-
-
-
-
-@APP.route('/send_mail')
-def send_mail():
-    """Handler for send_mail route."""
-
-    response = sendmail(MSGRAPH,
-                        subject=flask.request.args['subject'],
-                        recipients=flask.request.args['email'].split(';'),
-                        html=flask.request.args['body'])
-
-    response_json = pprint.pformat(response.data)
-    response_json = None if response_json == "b''" else response_json
-    return flask.render_template('mailsent.html',
-                                 sender=flask.request.args['sender'],
-                                 email=flask.request.args['email'],
-                                 subject=flask.request.args['subject'],
-                                 body=flask.request.args['body'],
-                                 response_status=response.status,
-                                 response_json=response_json)
-
 
 
 def request_headers():
@@ -100,49 +122,5 @@ def request_headers():
     return {'SdkVersion': 'sample-python-flask',
             'x-client-SKU': 'sample-python-flask',
             'client-request-id': str(uuid.uuid4()),
+            'Prefer': 'outlook.timezone="Eastern Standard Time"',
             'return-client-request-id': 'true'}
-
-def sendmail(client, subject=None, recipients=None, html=None, attachments=None):
-    """Helper to send email from current user.
-
-    client      = user-authenticated flask-oauthlib client instance
-    subject     = email subject (required)
-    recipients  = list of recipient email addresses (required)
-    html        = html body of the message (required)
-    attachments = list of file attachments (local filenames)
-
-    Returns the response from the POST to the sendmail API.
-    """
-
-    # Verify that required arguments have been passed.
-    if not all([client, subject, recipients, html]):
-        raise ValueError('sendmail(): required arguments missing')
-
-    # Create recipient list in required format.
-    recipient_list = [{'EmailAddress': {'Address': address}}
-                      for address in recipients]
-
-    # Create list of attachments in required format.
-    attached_files = []
-    if attachments:
-        for filename in attachments:
-            b64_content = base64.b64encode(open(filename, 'rb').read())
-            attached_files.append( \
-                {'@odata.type': '#microsoft.graph.fileAttachment',
-                 'ContentBytes': b64_content.decode('utf-8'),
-                 'ContentType': 'image/png',
-                 'Name': filename})
-
-    # Create email message in required format.
-    email_msg = {'Message': {'Subject': subject,
-                             'Body': {'ContentType': 'HTML', 'Content': html},
-                             'ToRecipients': recipient_list},
-                 'SaveToSentItems': 'true',
-                 'Attachments': attached_files}
-
-    # Do a POST to Graph's sendMail API and return the response.
-    return client.post('me/microsoft.graph.sendMail',
-                       headers=request_headers(),
-                       data=email_msg,
-                       format='json')
-
