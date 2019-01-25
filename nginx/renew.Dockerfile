@@ -14,8 +14,8 @@ COPY nginx-http.conf /etc/nginx/nginx.conf
 
 COPY serve /etc/nginx/html/
 
-COPY roomparking.cornelltech.io.conf /usr/src/roomparking.cornelltech.io.conf
-COPY roomparking.cornelltech.io.staged.conf /usr/src/roomparking.cornelltech.io.staged.conf
+COPY chatbots.ancile.smalldata.io.conf /usr/src/chatbots.ancile.smalldata.io.conf
+COPY chatbots.ancile.smalldata.io.staged.conf /usr/src/chatbots.ancile.smalldata.io.staged.conf
 COPY force_renew_certs.sh /usr/src/force_renew_certs.sh
 COPY renew_certificates.sh /usr/src/renew_certificates.sh
 COPY renew_certificates_staged.sh /usr/src/renew_certificates_staged.sh

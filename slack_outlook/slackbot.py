@@ -7,6 +7,16 @@ import requests
 import dateutil.parser
 import traceback
 import logging
+logger = logging.getLogger('chatbot')
+logger.setLevel(logging.DEBUG)
+fh = logging.FileHandler('/usr/src/app/ancile/slackbot/migrations/out.log')
+fh.setLevel(logging.DEBUG)
+# create formatter and add it to the handlers
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+fh.setFormatter(formatter)
+# add the handlers to the logger
+logger.addHandler(fh)
+
 from websocket import WebSocketConnectionClosedException
 
 eastern = timezone('US/Eastern')
@@ -30,9 +40,9 @@ def check_token(member):
     data = {'grant_type': 'refresh_token', 'refresh_token': member.refresh_token, 'client_id': CLIENT_ID,
             'client_secret': CLIENT_SECRET}
 
-    print(data)
+    logger.info(data)
     response = requests.post(AUTHORITY_URL+TOKEN_ENDPOINT, data)
-    print(response)
+    logger.info(response)
     if response.status_code==200:
         js_data = json.loads(response.text)
         member.token = js_data['access_token']
@@ -52,11 +62,11 @@ def is_available_now(room_full, time_start, time_end):
     find_json = find_room_json(room=room_full,
                                time_start=time_start.isoformat(),
                                time_end=time_end.isoformat())
-    print(find_json)
+    logger.info(find_json)
     msft_resp = MSGRAPH.post("me/findMeetingTimes", data=find_json, format='json',
                              headers=request_headers()).data
     if msft_resp.get('error', None):
-        print(msft_resp)
+        logger.info(msft_resp)
         return {'result': 'error', 'data': msft_resp}
     if len(msft_resp.get('meetingTimeSuggestions', list())) == 0:
         return {'result': 'success', 'data': False}
@@ -66,12 +76,13 @@ def is_available_now(room_full, time_start, time_end):
 def get_available_by_floor(floor, msg_graph, time_start, time_end):
     rooms = get_rooms_by_floor(floor)
     available_rooms = list()
-    rooms_json = check_floor_json(rooms, time_start, time_end)
+    rooms_json = check_floor_json(rooms, time_start.isoformat(), time_end.isoformat())
+    logger.info('requested rooms: ' + str(rooms_json))
     msft_resp = MSGRAPH.post("me/findMeetingTimes", data=rooms_json, format='json',
                              headers=request_headers()).data
 
     if msft_resp.get('error', None):
-        print(msft_resp)
+        logger.info(msft_resp)
         return {'result': 'error', 'data': msft_resp}
     elif len(msft_resp['meetingTimeSuggestions']) > 0:
         for x in msft_resp['meetingTimeSuggestions'][0]["attendeeAvailability"]:
@@ -84,8 +95,9 @@ def get_available_by_floor(floor, msg_graph, time_start, time_end):
 
 
 def rtm(token, queue, workspace, workspace_token):
+    db.create_all()
     sc = SlackClient(workspace_token)
-    print('rtm start for ', workspace)
+    logger.info('rtm start for ' +  str(workspace))
     room_parking_channel = None
 
     @MSGRAPH.tokengetter
@@ -109,7 +121,7 @@ def rtm(token, queue, workspace, workspace_token):
     for x in members:
         if x.display_name=='roomparking':
             room_parking_channel = x.user_id
-            print(room_parking_channel)
+            logger.info(room_parking_channel)
         elif not x.channel_id:
             res = sc.api_call('conversations.open', users=x.user_id)
             if not res.get('error', None):
@@ -128,14 +140,14 @@ def rtm(token, queue, workspace, workspace_token):
                     res = sc.rtm_read()
                 # processing, etc
                 except (WebSocketConnectionClosedException, TimeoutError, SlackConnectionError) as  e:
-                    print('Connecitons was closed. Restarting.')
-                    print(e.args)
+                    logger.info('Connecitons was closed. Restarting.')
+                    logger.info(e.args)
                     sc.rtm_connect()
                     continue
 
                 if not queue.empty():
                     server_token = queue.get()
-                    print('token', server_token)
+                    logger.info('token' + str(server_token))
                     member = channel_members.get(server_token['channel'], False)
                     if server_token['status']=='error' or (not server_token.get('access_token', False)) or (not server_token.get('refresh_token', False)):
                         sc.rtm_send_message(server_token['channel'], 'Sorry there was a problem please try again.')
@@ -144,27 +156,31 @@ def rtm(token, queue, workspace, workspace_token):
                         member.token = server_token['access_token']
                         member.refresh_token = server_token['refresh_token']
                         member.expires = server_token['expires']
-                        print('expires', member.expires, ' ', member.display_name)
+                        logger.info('expires' + str(member.expires) + ' ' + str(member.display_name))
                         member.update()
 
                         sc.rtm_send_message(member.channel_id,
                                             'Successful authentication! \n {0}'.format(GREETING_TEXT))
-                        print('authorized')
+                        logger.info('authorized')
                     else:
-                        print('not my token')
+                        logger.info('not my token')
                         queue.put(server_token)
                         time.sleep(2)
                 if len(res) > 0 and type(res[0].get('channel', None)) is not str:
-                    print('res', res)
+                    logger.info('res' + str(res))
                     continue
                 # if len(res) > 0:
-                #     print(res)
+                #     logger.info(res)
 
                 if len(res) > 0 and res[0].get('channel', None) in channel_members.keys() and res[0].get('type', None) == 'message' and res[0].get('user', None) != room_parking_channel:
                     member = channel_members[res[0].get('channel', None)]
+
                     # sc.rtm_send_message(member.channel_id, '{0}, {1}, {2}, {3}'.format(member.expires, utc.localize(member.expires),(datetime.now(utc)+timedelta(hours=1)), eastern.localize(member.expires)<=(datetime.now(utc)+timedelta(hours=1))))
                     if not res[0].get('text', False) or res[0].get('subtype') and res[0]['subtype'] == 'bot_message':
                         continue
+
+                    usage_log = Usage(member.display_name, res[0]['text'].lower()[:79])
+                    usage_log.add()
 
                     if res[0]['text'].lower()=='delete token':
                         member.token = None
@@ -173,11 +189,11 @@ def rtm(token, queue, workspace, workspace_token):
                         member.update()
 
                     if member.token and member.expires and utc.localize(member.expires)<=datetime.now(utc):
-                        print('checking for new token')
+                        logger.info('checking for new token')
                         if not check_token(member):
                             sc.rtm_send_message(member.channel_id, 'Couldn\'t update token. Please login again.')
                         else:
-                            print('updated token! for ', member.display_name)
+                            logger.info('updated token! for ' + str(member.display_name))
                             # sc.rtm_send_message(member.channel_id, 'updated token succesfully.')
                     if not member.token:
                         sc.rtm_send_message(member.channel_id,
@@ -187,7 +203,7 @@ def rtm(token, queue, workspace, workspace_token):
                                             'Use your Cornell Email (netid@cornell.edu).'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id, workspace=workspace))
                     else:
                         token = member.token
-                        print('booking for ', member.display_name)
+                        logger.info('booking for ' + str(member.display_name))
 
                         member_state = None
                         if member.state:
@@ -231,7 +247,7 @@ def rtm(token, queue, workspace, workspace_token):
                                 member.state = json.dumps(member_state) if member_state else None
                                 member.update()
                             except Exception as e:
-                                print(e)
+                                logger.info(e)
                                 sc.rtm_send_message(member.channel_id, e.args[0])
                                 sc.rtm_send_message(member.channel_id, 'Wrong command. Try: ```exit``` or ```1```')
                         else:
@@ -258,7 +274,7 @@ def rtm(token, queue, workspace, workspace_token):
 
                                 elif words[0].lower()== 'where':
                                     if len(words)>1 and words[1] in room_no:
-                                        sc.rtm_send_message(member.channel_id, 'https://roomparking.cornelltech.io/rooms/{0}.jpg'.format(words[1]))
+                                        sc.rtm_send_message(member.channel_id, 'https://chatbots.ancile.smalldata.io/rooms/{0}.jpg'.format(words[1]))
                                     else:
                                         sc.rtm_send_message(member.channel_id,
                                                             'Wrong input. Try ```where 375```')
@@ -266,7 +282,7 @@ def rtm(token, queue, workspace, workspace_token):
                                 elif words[0].lower() == 'cancel':
 
                                     msft_resp = MSGRAPH.get("me/events", headers=request_headers()).data
-                                    # print(msft_resp)
+                                    # logger.info(msft_resp)
                                     meetings_by_bot = list()
                                     if len(msft_resp.get('value', list()))>0:
                                         for x in msft_resp['value']:
@@ -275,7 +291,7 @@ def rtm(token, queue, workspace, workspace_token):
                                                                    "contact Eugene (eugene@cs.cornell.edu) for help." and end_date_time > datetime.now(eastern):
                                                 meetings_by_bot.append(get_meeting_info(x))
                                                 sc.rtm_send_message(member.channel_id, get_meeting_info(x))
-                                                # print(x)
+                                                # logger.info(x)
                                     if len(meetings_by_bot)>0:
                                         dumped_state = json.dumps({'state':'cancel', 'data': meetings_by_bot})
                                         if len(dumped_state)>3000:
@@ -288,7 +304,7 @@ def rtm(token, queue, workspace, workspace_token):
                                             response_res.append('{4}. Meeting at {0}. Starting at {1} until {2} (timezone: {3})'.format(x['location'], x["start"], x["end"], x['timeZone'], pos+1))
                                         sc.rtm_send_message(member.channel_id,
                                                             'Here are the meetings found for your account: \n {0} \nPlease respond with the position of the meeting. Ex: ```1``` If only one meeting present, please still type: 1. To exit the cancelling submenu type exit.'.format('\n'.join(response_res)))
-                                        print(meetings_by_bot)
+                                        logger.info(meetings_by_bot)
                                         sc.rtm_send_message(member.channel_id, meetings_by_bot)
                                     else:
                                         sc.rtm_send_message(member.channel_id,
@@ -347,7 +363,7 @@ def rtm(token, queue, workspace, workspace_token):
 
 
                                     room = words[1]
-                                    print(room)
+                                    logger.info(room)
                                     room_full = get_room_by_no(room)
                                     if not room_full:
                                         sc.rtm_send_message(member.channel_id, 'Room not found. Try "list {floor_id}" to get rooms.')
@@ -373,7 +389,7 @@ def rtm(token, queue, workspace, workspace_token):
                                                                     headers=request_headers()).data
                                             if msft_resp.get('error'):
                                                 raise SystemError(msft_resp)
-                                            print(msft_resp)
+                                            logger.info(msft_resp)
                                             sc.rtm_send_message(member.channel_id,
                                                                 'Success! The room {4} was booked for you from {0}:{1:02d} to {2}:{3:02d}.'.format(time_start.hour,
                                                                                                                             time_start.minute,
@@ -395,21 +411,20 @@ def rtm(token, queue, workspace, workspace_token):
 
                                 # find_room_json(words[1], str())
                             except Exception as e:
-                                print(e)
+                                logger.info(e)
                                 sc.rtm_send_message(member.channel_id,  e.args[0])
                                 sc.rtm_send_message(member.channel_id, 'Try: ```help``` or ```book 397``` or ```list 4``` or ```book 375 2pm```')
 
         else:
-            print("Connection Failed")
+            logger.info("Connection Failed")
 
 
 
 
 if __name__ == '__main__':
-    db.create_all()
     for tokens in SLACK_TOKENS:
         p = Process(target=rtm, args=(token, queue, tokens['name'], tokens['token']))
         p.start()
 
     APP.run(use_reloader=False, host='0.0.0.0', port=8000)
-    print(APP.config)
+    logger.info(APP.config)

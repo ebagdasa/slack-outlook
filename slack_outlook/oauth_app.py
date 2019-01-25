@@ -80,6 +80,14 @@ class Member(Base):
         res = Member.query.filter_by(user_id=user_id, workspace=workspace).first()
         return res if res else None
 
+class Usage(Base):
+    user_name = db.Column(db.String(80), nullable=False)
+    command = db.Column(db.String(80), nullable=False)
+
+    def __init__(self, un, c):
+        self.user_name = un
+        self.command = c
+
 
 
 @APP.route('/')
