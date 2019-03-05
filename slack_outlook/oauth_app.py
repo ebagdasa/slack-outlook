@@ -67,6 +67,7 @@ class Member(Base):
     workspace = db.Column(db.String(120), nullable=False)
     refresh_token = db.Column(db.String(3000), nullable=True)
     expires = db.Column(db.DateTime, nullable=True)
+    ancile_email = db.Column(db.String(), nullable=True)
 
 
     def __init__(self, dn, fn, uid, workspace):

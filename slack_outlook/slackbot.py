@@ -182,6 +182,7 @@ def rtm(token, queue, workspace, workspace_token):
                     usage_log = Usage(member.display_name, res[0]['text'].lower()[:79])
                     usage_log.add()
 
+
                     if res[0]['text'].lower()=='delete token':
                         member.token = None
                         member.refresh_token = None
@@ -208,7 +209,20 @@ def rtm(token, queue, workspace, workspace_token):
                         member_state = None
                         if member.state:
                             member_state = json.loads(member.state)
-                        if member_state and member_state['state'] == 'cancel':
+
+                        if member_state and member_state['state'] == 'ancile':
+                            text = res[0]['text'].lower()
+                            if '@' in text:
+                                member.ancile_email = text.split('|')[1][:-1]
+                                member.state = None
+                                member.update()
+                                sc.rtm_send_message(member.channel_id, "Saved email: " + member.ancile_email)
+                            elif text == 'exit':
+                                member.state = None
+                                member.update()
+                            else:
+                                sc.rtm_send_message(member.channel_id, "Please specify email you used when registering on Ancile or type `exit` to go back")
+                        elif member_state and member_state['state'] == 'cancel':
                             try:
                                 words = res[0]['text']
                                 if words=='exit':
@@ -271,6 +285,72 @@ def rtm(token, queue, workspace, workspace_token):
 
                                 if words[0].lower() == 'help':
                                     sc.rtm_send_message(member.channel_id, GREETING_TEXT)
+
+                                elif words[0].lower() == 'bnm':
+                                    sc.rtm_send_message(member.channel_id, "Book near me for " + member.display_name)
+                                    if member.ancile_email:
+                                        sc.rtm_send_message(member.channel_id, "Book near me booking for Ancile account: " + member.ancile_email)
+                                        js = {"api_token": ANCILE_TOKEN,
+                                                                   "program": "get_location_data(); return;",
+                                                                   "user": member.ancile_email, "purpose": "research"}
+                                        sc.rtm_send_message(member.channel_id, json.dumps(js))
+                                        res = requests.post('https://dev.ancile.smalldata.io:4001/api/run',
+                                                            json=js)
+                                        sc.rtm_send_message(member.channel_id, res.text)
+                                        if res.status_code != 200:
+                                            sc.rtm_send_message(member.channel_id, "Error.")
+                                            if res.status_code != 400:
+                                                sc.rtm_send_message(member.channel_id, res.text)
+                                        elif res.json()["output"].get("res", False):
+                                            floor = res.json()["output"]["res"]["floor_name"]
+                                            sc.rtm_send_message(member.channel_id, "You are on the floor: " + floor)
+                                            room_selection = {'Third Floor': ['367', '375', '377', '360'], 'Second Floor': ['267', '260', '268', '275'], 'First Floor': False, 'Fourth Floor': False}
+
+                                            if res.json()["output"]["res"]["building_name"] ==  "2360 - Bloomberg Center" \
+                                                    and room_selection.get(floor, False):
+                                                for room in room_selection[floor]:
+                                                    sc.rtm_send_message(member.channel_id, "Booking room " + room)
+                                                    room_full = get_room_by_no(room)
+                                                    available = is_available_now(room_full, time_start, time_end)
+                                                    if available['result'] == 'success':
+                                                        if not available['data']:
+                                                            sc.rtm_send_message(member.channel_id, 'Room is already occupied!')
+                                                            sc.rtm_send_message(member.channel_id, available)
+                                                            continue
+                                                        else:
+                                                            book_json = create_booking_json(user=member.first_name,
+                                                                                            room=room_full,
+                                                                                            time_start=time_start.isoformat(),
+                                                                                            time_end=time_end.isoformat())
+                                                            msft_resp = MSGRAPH.post("me/calendar/events", data=book_json, format='json',
+                                                                                     headers=request_headers()).data
+                                                            if msft_resp.get('error'):
+                                                                raise SystemError(msft_resp)
+                                                            logger.info(msft_resp)
+                                                            sc.rtm_send_message(member.channel_id,
+                                                                                'Success! The room {4} was booked for you from {0}:{1:02d} to {2}:{3:02d}.'.format(time_start.hour,
+                                                                                                                                                                   time_start.minute,
+                                                                                                                                                                   time_end.hour,
+                                                                                                                                                                   time_end.minute,
+                                                                                                                                                               room))
+                                                            break
+
+
+
+
+
+                                        else:
+                                            sc.rtm_send_message(member.channel_id, "Please ask amdin to add a policy that would allow us to grab your data like: `get_location_data.return`.")
+
+
+
+                                    else:
+                                        dumped_state = json.dumps({'state': 'ancile', 'data': []})
+                                        member.state = dumped_state
+                                        member.update()
+                                        sc.rtm_send_message(member.channel_id, "Please register on https://dev.ancile.smalldata.io:4001 and tell us your email: ")
+
+
 
                                 elif words[0].lower()== 'where':
                                     if len(words)>1 and words[1] in room_no:
