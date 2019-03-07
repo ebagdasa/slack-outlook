@@ -201,7 +201,7 @@ def rtm(token, queue, workspace, workspace_token):
                                             'Hello, {name}! This is the Room Booking app for Bloomberg Center at CornellTech.\n'
                                             'It can help you quickly book any room for the next hour. This app will create new meeting on your calendar and invite the selected room. \n'
                                             'To continue please authorize with your Cornell Office 365 account: \n Click here: {ip}?channel={channel}&workspace={workspace} \n'
-                                            'Use your Cornell Email (netid@cornell.edu).'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id, workspace=workspace))
+                                            'Use your Cornell Email (netid@cornell.edu). If you have any problems ask Eugene: eb693@cornell.edu.'.format(name=member.first_name, ip=SERVER_IP, channel=member.channel_id, workspace=workspace))
                     else:
                         token = member.token
                         logger.info('booking for ' + str(member.display_name))
@@ -217,11 +217,13 @@ def rtm(token, queue, workspace, workspace_token):
                                 member.state = None
                                 member.update()
                                 sc.rtm_send_message(member.channel_id, "Saved email: " + member.ancile_email)
+                                sc.rtm_send_message(member.channel_id, "Don't forget to connect the Campus Data Service to your account, so we can fetch your data. Go to https://dev.ancile.smalldata.io:4001/user/dashboard")
                             elif text == 'exit':
                                 member.state = None
                                 member.update()
                             else:
                                 sc.rtm_send_message(member.channel_id, "Please specify email you used when registering on Ancile or type `exit` to go back")
+                            continue
                         elif member_state and member_state['state'] == 'cancel':
                             try:
                                 words = res[0]['text']
@@ -296,14 +298,22 @@ def rtm(token, queue, workspace, workspace_token):
                                         sc.rtm_send_message(member.channel_id, json.dumps(js))
                                         res = requests.post('https://dev.ancile.smalldata.io:4001/api/run',
                                                             json=js)
-                                        sc.rtm_send_message(member.channel_id, res.text)
+                                        sc.rtm_send_message(member.channel_id, json.dumps(res.json()))
                                         if res.status_code != 200:
                                             sc.rtm_send_message(member.channel_id, "Error.")
                                             if res.status_code != 400:
-                                                sc.rtm_send_message(member.channel_id, res.text)
-                                        elif res.json()["output"].get("res", False):
+                                                sc.rtm_send_message(member.channel_id, json.dumps(res.json()))
+                                        elif res.json().get("output", False) and res.json()["output"].get("res", False):
                                             floor = res.json()["output"]["res"]["floor_name"]
-                                            sc.rtm_send_message(member.channel_id, "You are on the floor: " + floor)
+                                            if floor == 'Fourth Floor':
+                                                floor = 'Third Floor'
+                                                sc.rtm_send_message(member.channel_id, "Location service says that you are on the fourth floor, but we will still book a room on third floor.")
+                                            elif floor == 'First Floor':
+                                                sc.rtm_send_message(member.channel_id, "Location service says that you are on the First Floor, but we will still book a room on the second floor.")
+                                                floor = 'Second Floor'
+                                            else:
+                                                sc.rtm_send_message(member.channel_id, "You are on the floor: " + floor)
+
                                             room_selection = {'Third Floor': ['367', '375', '377', '360'], 'Second Floor': ['267', '260', '268', '275'], 'First Floor': False, 'Fourth Floor': False}
 
                                             if res.json()["output"]["res"]["building_name"] ==  "2360 - Bloomberg Center" \
@@ -334,22 +344,15 @@ def rtm(token, queue, workspace, workspace_token):
                                                                                                                                                                    time_end.minute,
                                                                                                                                                                room))
                                                             break
-
-
-
-
-
                                         else:
-                                            sc.rtm_send_message(member.channel_id, "Please ask amdin to add a policy that would allow us to grab your data like: `get_location_data.return`.")
-
-
+                                            sc.rtm_send_message(member.channel_id, "Please ask admin to add a policy that would allow us to grab your data like: `get_location_data.return`.")
 
                                     else:
                                         dumped_state = json.dumps({'state': 'ancile', 'data': []})
                                         member.state = dumped_state
                                         member.update()
                                         sc.rtm_send_message(member.channel_id, "Please register on https://dev.ancile.smalldata.io:4001 and tell us your email: ")
-
+                                    continue
 
 
                                 elif words[0].lower()== 'where':
