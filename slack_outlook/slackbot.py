@@ -16,6 +16,7 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 fh.setFormatter(formatter)
 # add the handlers to the logger
 logger.addHandler(fh)
+import traceback
 
 from websocket import WebSocketConnectionClosedException
 
@@ -87,6 +88,7 @@ def get_available_by_floor(floor, msg_graph, time_start, time_end):
     elif len(msft_resp['meetingTimeSuggestions']) > 0:
         for x in msft_resp['meetingTimeSuggestions'][0]["attendeeAvailability"]:
             if x["availability"] == "free":
+                print(x)
                 available_rooms.append(room_by_email(x["attendee"]['emailAddress']['address']))
 
     return {'result': 'success', 'data': available_rooms}
@@ -141,7 +143,7 @@ def rtm(token, queue, workspace, workspace_token):
                 # processing, etc
                 except (WebSocketConnectionClosedException, TimeoutError, SlackConnectionError) as  e:
                     logger.info('Connecitons was closed. Restarting.')
-                    logger.info(e.args)
+                    logger.info(traceback.format_exc())
                     sc.rtm_connect()
                     continue
 
@@ -263,7 +265,7 @@ def rtm(token, queue, workspace, workspace_token):
                                 member.state = json.dumps(member_state) if member_state else None
                                 member.update()
                             except Exception as e:
-                                logger.info(e)
+                                logger.info(traceback.format_exc())
                                 sc.rtm_send_message(member.channel_id, e.args[0])
                                 sc.rtm_send_message(member.channel_id, 'Wrong command. Try: ```exit``` or ```1```')
                         else:
@@ -274,7 +276,10 @@ def rtm(token, queue, workspace, workspace_token):
                                 if time_start.minute >= 20 and time_start.minute<50:
                                     time_start = time_start.replace(microsecond=0, second=0, minute=30, tzinfo=None)
                                 elif time_start.minute>=50:
-                                    time_start = time_start.replace(microsecond=0, second=0, minute=0, hour=time_start.hour+1, tzinfo=None)
+                                    if time_start.hour<23:
+                                        time_start = time_start.replace(microsecond=0, second=0, minute=0, hour=time_start.hour + 1, tzinfo=None)
+                                    else:
+                                        time_start = time_start.replace(microsecond=0, second=0, minute=0, hour=0, day=time_start.day+1, tzinfo=None)
                                 else:
                                     time_start = time_start.replace(microsecond=0, second=0, minute=0, tzinfo=None)
 
@@ -288,27 +293,55 @@ def rtm(token, queue, workspace, workspace_token):
                                 if words[0].lower() == 'help':
                                     sc.rtm_send_message(member.channel_id, GREETING_TEXT)
 
+                                if words[0].lower() == 'whereami':
+                                    if member.ancile_email:
+                                        js = {
+                                            "token": ANCILE_TOKEN,
+                                            "user": member.ancile_email,
+                                            "purpose": "research",
+                                            "program":
+"""dp_1 = user_specific.get_empty_data_pair(data_source='campus_data_service')
+indoor_location.fetch_location(data=dp_1)
+result.append_dp_data_to_result(data=dp_1)"""
+                                        }
+                                        res = requests.post('http://dev.ancile.smalldata.io:5000/api/run',
+                                                            json=js)
+                                        print(res.text)
+                                        if res.status_code != 200:
+                                            sc.rtm_send_message(member.channel_id, res.text)
+                                        else:
+                                            loc = res.json()["data"][0]["location"]
+                                            sc.rtm_send_message(member.channel_id, "{0} you were on the {1} in the {2} with the device: {3}".format(loc['timestamp'], loc['floor_name'], loc['building_name'], loc['device_type']))
+                                    else:
+                                        sc.rtm_send_message(member.channel_id, "Type `bnm` command first.")
+
                                 elif words[0].lower() == 'bnm':
                                     sc.rtm_send_message(member.channel_id, "Book near me for " + member.display_name)
                                     if member.ancile_email:
                                         sc.rtm_send_message(member.channel_id, "Book near me booking for Ancile account: " + member.ancile_email)
-                                        js = {"api_token": ANCILE_TOKEN,
-                                                                   "program": "get_location_data(); return;",
-                                                                   "user": member.ancile_email, "purpose": "research"}
+                                        js = {
+                                            "token": ANCILE_TOKEN,
+                                            "user": member.ancile_email,
+                                            "purpose": "research",
+                                            "program":
+"""dp_1 = user_specific.get_empty_data_pair(data_source='campus_data_service')
+indoor_location.fetch_location(data=dp_1)
+result.append_dp_data_to_result(data=dp_1)"""
+                                        }
                                         sc.rtm_send_message(member.channel_id, json.dumps(js))
-                                        res = requests.post('https://dev.ancile.smalldata.io:4001/api/run',
+                                        res = requests.post('http://dev.ancile.smalldata.io:5000/api/run',
                                                             json=js)
-                                        sc.rtm_send_message(member.channel_id, json.dumps(res.json()))
+                                        sc.rtm_send_message(member.channel_id, res.text)
                                         if res.status_code != 200:
                                             sc.rtm_send_message(member.channel_id, "Error.")
                                             if res.status_code != 400:
-                                                sc.rtm_send_message(member.channel_id, json.dumps(res.json()))
-                                        elif res.json().get("output", False) and res.json()["output"].get("res", False):
-                                            floor = res.json()["output"]["res"]["floor_name"]
+                                                sc.rtm_send_message(member.channel_id, res.text)
+                                        elif res.json().get("data", False) and res.json()["data"][0].get("location", False):
+                                            floor = res.json()["data"][0]["location"]["floor_name"]
                                             if floor == 'Fourth Floor':
                                                 floor = 'Third Floor'
                                                 sc.rtm_send_message(member.channel_id, "Location service says that you are on the fourth floor, but we will still book a room on third floor.")
-                                            elif floor == 'First Floor':
+                                            elif floor == 'Ground Floor':
                                                 sc.rtm_send_message(member.channel_id, "Location service says that you are on the First Floor, but we will still book a room on the second floor.")
                                                 floor = 'Second Floor'
                                             else:
@@ -316,7 +349,7 @@ def rtm(token, queue, workspace, workspace_token):
 
                                             room_selection = {'Third Floor': ['367', '375', '377', '360'], 'Second Floor': ['267', '260', '268', '275'], 'First Floor': False, 'Fourth Floor': False}
 
-                                            if res.json()["output"]["res"]["building_name"] ==  "2360 - Bloomberg Center" \
+                                            if res.json()["data"][0]["location"]["building_name"] ==  "2360 - Bloomberg Center" \
                                                     and room_selection.get(floor, False):
                                                 for room in room_selection[floor]:
                                                     sc.rtm_send_message(member.channel_id, "Booking room " + room)
@@ -345,7 +378,7 @@ def rtm(token, queue, workspace, workspace_token):
                                                                                                                                                                room))
                                                             break
                                         else:
-                                            sc.rtm_send_message(member.channel_id, "Please ask admin to add a policy that would allow us to grab your data like: `get_location_data.return`.")
+                                            sc.rtm_send_message(member.channel_id, "Please ask admin to add a policy that would allow us to grab your data like: `ANYF*`.")
 
                                     else:
                                         dumped_state = json.dumps({'state': 'ancile', 'data': []})
@@ -393,7 +426,11 @@ def rtm(token, queue, workspace, workspace_token):
                                         sc.rtm_send_message(member.channel_id,
                                                             'No meetings created by our bot has been found for your account. Book some now! ' )
 
-
+                                elif words[0].lower() == 'bnmupdate':
+                                    email = words[1].lower()
+                                    member.ancile_email = email.split('|')[1][:-1]
+                                    member.update()
+                                    sc.rtm_send_message(member.channel_id, "updated your Ancile email!")
                                 elif words[0].lower()=='list':
                                     if len(words[1])>1:
                                         floor = int(words[1][0])
@@ -494,7 +531,7 @@ def rtm(token, queue, workspace, workspace_token):
 
                                 # find_room_json(words[1], str())
                             except Exception as e:
-                                logger.info(e)
+                                logger.info(traceback.format_exc())
                                 sc.rtm_send_message(member.channel_id,  e.args[0])
                                 sc.rtm_send_message(member.channel_id, 'Try: ```help``` or ```book 397``` or ```list 4``` or ```book 375 2pm```')
 
