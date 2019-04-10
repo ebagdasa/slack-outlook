@@ -297,12 +297,12 @@ def rtm(token, queue, workspace, workspace_token):
                                     if member.ancile_email:
                                         js = {
                                             "token": ANCILE_TOKEN,
-                                            "user": member.ancile_email,
+                                            "users": [member.ancile_email],
                                             "purpose": "research",
                                             "program":
-"""dp_1 = user_specific.get_empty_data_pair(data_source='campus_data_service')
+"""dp_1 = user_specific['{0}'].get_empty_data_pair(data_source='campus_data_service')
 indoor_location.fetch_location(data=dp_1)
-result.append_dp_data_to_result(data=dp_1)"""
+result.append_dp_data_to_result(data=dp_1)""".format(member.ancile_email)
                                         }
                                         res = requests.post('http://dev.ancile.smalldata.io:5000/api/run',
                                                             json=js)
@@ -532,7 +532,7 @@ result.append_dp_data_to_result(data=dp_1)"""
                                 # find_room_json(words[1], str())
                             except Exception as e:
                                 logger.info(traceback.format_exc())
-                                sc.rtm_send_message(member.channel_id,  e.args[0])
+                                sc.rtm_send_message(member.channel_id,  traceback.format_exc())
                                 sc.rtm_send_message(member.channel_id, 'Try: ```help``` or ```book 397``` or ```list 4``` or ```book 375 2pm```')
 
         else:
