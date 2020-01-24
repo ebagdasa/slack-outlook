@@ -293,7 +293,7 @@ def rtm(token, queue, workspace, workspace_token):
                                 if words[0].lower() == 'help':
                                     sc.rtm_send_message(member.channel_id, GREETING_TEXT)
 
-                                if words[0].lower() == 'whereami':
+                                elif words[0].lower() == 'whereami':
                                     if member.ancile_email:
                                         js = {
                                             "token": ANCILE_TOKEN,
@@ -466,7 +466,9 @@ result.append_dp_data_to_result(data=dp_1)"""
 
                                     if len(words)==3:
                                         time_new = words[2]
-                                        if 'pm' == time_new[-2:]:
+                                        if time_new == '12pm':
+                                            time_hour = 12
+                                        elif 'pm' == time_new[-2:]:
                                             time_hour = int(time_new[:-2]) + 12
                                         elif 'am' == time_new[-2:]:
                                             time_hour = int(time_new[:-2])
